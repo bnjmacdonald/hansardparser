@@ -1,20 +1,21 @@
-""" Contains methods for converting a list of Entry objects (output from use of hansard_parser.py methods) into a dictionary or Pandas DataFrame. 
+""" Contains methods for converting a list of Entry objects (output from use of hansard_parser.py methods) into a dictionary or Pandas DataFrame.
 
 """
 
+import os
+import re
 import collections
-import pandas as pd
 import copy
 import warnings
 import numpy as np
-import os
-import re
+import pandas as pd
 
-from server.hansardparser import utils
+from plenaryparser import utils
+
 
 def convert_contents(contents, metadata, attributes, to_format, verbose=False):
-    """converts raw contents to a specified format. 
-    
+    """converts raw contents to a specified format.
+
     Arguments:
         contents : list of Entries
             list of entries as output by HansardParser._process_transcript.
@@ -23,7 +24,7 @@ def convert_contents(contents, metadata, attributes, to_format, verbose=False):
         metadata : Sitting obj.
             Sitting object as defined in Sitting.py.
         to_format : str
-            Desired output format. Either 'list', 'df-raw', or 'df-long'. 
+            Desired output format. Either 'list', 'df-raw', or 'df-long'.
             'df-raw' is a pandas dataframe where each row is an entry. This format is more useful for comparing the parsed transcript to the original pdf for errors.
             'df-long' is a multi-index pandas dataframe (where header and subheader are the indices). This format is more useful for analysis since speeches are organized under headers and subheaders.
             'list' is a 2d list.
@@ -59,7 +60,7 @@ def contents_to_df_raw(contents, attributes, metadata_names, metadata_values):
 
 
 def contents_to_df_long(contents, attributes, metadata_names, metadata_values, verbose):
-    """converts a dictionary of contents (produced by contents_to_dict) to a 
+    """converts a dictionary of contents (produced by contents_to_dict) to a
     pandas DataFrame. """
     contents_2d = contents_to_2darray(contents, attributes, metadata_values, verbose)
     # contents_dict_mod = collections.OrderedDict()
@@ -70,11 +71,11 @@ def contents_to_df_long(contents, attributes, metadata_names, metadata_values, v
 
 
 def contents_to_2darray(contents, attributes, metadata_values, verbose):
-    """ Converts a list of entries to a nested dict organized by header and sub-header. """
+    """Converts a list of entries to a 2d array."""
     # transcript_dict = collections.OrderedDict()
     # NOTE TO SELF: this first while loop is a temporary block to pop entries until the first header is encountered. This may lose some valuable information at the beginning of the transript if for some reason the first header does not appear for a while or was not entered correctly in contents.
     # contents = copy.deepcopy(contents)
-    
+
     # prelim = []
     # entry = contents.pop(0)
     # while entry.entry_type != 'header':
@@ -94,7 +95,7 @@ def contents_to_2darray(contents, attributes, metadata_values, verbose):
     for entry in contents:
         # entry = contents.pop(0)
         if entry.entry_type in ['header', 'subheader', 'subsubheader']:
-            if len(data) and data[-1][:3] != [current_header, current_subheader, current_subsubheader]:
+            if len(data) > 0 and data[-1][:3] != [current_header, current_subheader, current_subsubheader]:
                 data.append([current_header, current_subheader, current_subsubheader] + [None]*len(attributes) + metadata_values)
             if entry.entry_type == 'header':
                 current_header = entry.text
@@ -117,13 +118,18 @@ def contents_to_2darray(contents, attributes, metadata_values, verbose):
 
 
 def export_contents(filename, contents, output_dir, input_format, output_format, suffix=None):
-    """ Exports transcript contents to output_dir using filename. 
-    
+    """Exports transcript contents to output_dir using filename.
+
     Arguments:
+
         filename :
+
         contents :
+
         output_dir :
-        input_format : 
+
+        input_format :
+
         output_format :
     """
     if suffix is None:
@@ -154,5 +160,6 @@ def export_contents(filename, contents, output_dir, input_format, output_format,
             contents.to_csv(output_filepath, index=False, encoding='utf-8')
     else:
         raise RuntimeError('output_format "%s" not permitted.' % output_format)
+    return 0
 
 
