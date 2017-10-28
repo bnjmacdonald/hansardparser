@@ -23,20 +23,17 @@ class Sitting(object):
             sitting of parliament.
         session : int
             session of parliament
-        parliament : int
-            e.g. 7th parliament. 
     """
 
     # __metaclass__ = ABCMeta
 
-    def __init__(self, heading=None, date=None, time=None, start_page=None, sitting=None, session=None, parliament=None):
+    def __init__(self, heading=None, date=None, time=None, start_page=None, sitting=None, session=None):
         self.heading = heading
         self.date = date
         self.time = time
         self.start_page = start_page
         self.sitting = sitting
         self.session = session
-        self.parliament = parliament
 
     def __str__(self):
         return str(self.__dict__)

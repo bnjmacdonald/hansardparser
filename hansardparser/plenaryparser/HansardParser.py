@@ -7,7 +7,7 @@ hansard_convert.py module.
 Notes:
     This implementation was inspired in part by: https://github.com/mysociety/pombola/blob/master/pombola/hansard/kenya_parser.py
 
-    The basic pipeline of the HansardParser class is as follows: 
+    The basic pipeline of the HansardParser class is as follows:
         (a) convert PDF to html/txt (convert_pdf_to_format).
         (b) extract Hansard metadata (process_html_meta).
         (c) for each line/tag, create an entry object (process_html_contents).
@@ -21,27 +21,26 @@ import time
 import traceback
 
 import settings
-from server.hansardparser.Sitting import Sitting
-from server.hansardparser import utils
-from server.hansardparser.convert_hansard import convert_contents
-from server.rawdatamgr.utils import get_parliament_num
+from plenaryparser.Sitting import Sitting
+from plenaryparser import utils
+from plenaryparser.convert_hansard import convert_contents
 
 class HansardParser(object):
-    """ The HansardParser class contains methods for parsing 
+    """ The HansardParser class contains methods for parsing
     an Hansard transcript.
-    
+
     Attributs:
-        fmt : str. Options: 'txt', 'html'. Represents whether pdf should be 
+        fmt : str. Options: 'txt', 'html'. Represents whether pdf should be
             converted to .txt or .html.
         verbose : bool
-            False by default. Set to 1 or 2 if detailed output to console is 
+            False by default. Set to 1 or 2 if detailed output to console is
             desired.
         parliament_dates : dict like {int -> (datetime, datetime)}
-            dictionary of parliaments-date pairs. Gives range of dates for 
-            each parliament. 
+            dictionary of parliaments-date pairs. Gives range of dates for
+            each parliament.
         italic_phrases : list of strings
-            List containing strings that appear as italic phrases in speeches, 
-            but which should not be treated as a scene entry_type. 
+            List containing strings that appear as italic phrases in speeches,
+            but which should not be treated as a scene entry_type.
     """
 
     italic_phrases = [
@@ -107,8 +106,8 @@ class HansardParser(object):
         self.soup = None
 
     def process_transcript(self, file_path, save_soup=False, path=None, rm_whitespace=True, append_meta=True, to_format='df-long'):
-        """wrapper for processing a list of transcript bs4 contents. 
-        
+        """wrapper for processing a list of transcript bs4 contents.
+
         Arguments:
             file_path: str. location of transcript to parse.
             save_soup: bool. Default: False. If True, saves soup to disk.
@@ -120,7 +119,7 @@ class HansardParser(object):
             to_format: str. See self._convert_contents. If None, contents are
                 not converted at all (i.e. they are left as a list of Entry
                 objects).
-        
+
         Returns:
             metadata: Sitting object. contains metadata on the processed
                 transcript.
@@ -180,17 +179,17 @@ class HansardParser(object):
                 self._process_contents.
             metadata: Sitting object, like returned from self._process_meta.
             to_format : str
-                Desired output format. Either 'dict', 'df-raw', or 'df-long'. 
-                'df-raw' is a pandas dataframe where each row is an entry. 
+                Desired output format. Either 'dict', 'df-raw', or 'df-long'.
+                'df-raw' is a pandas dataframe where each row is an entry.
                 This format is more useful for comparing the parsed transcript
                 to the original pdf for errors.
-                'df-long' is a multi-index pandas dataframe (where header and 
+                'df-long' is a multi-index pandas dataframe (where header and
                 subheader are the indices). This format is more useful for
                 analysis since speeches are organized under headers and
                 subheaders.
                 'dict' is a nested dictionary with the following structure:
-                {header: {subheader: [entries as tuples]}}. Not sure what this 
-                structure will actually be useful for, though it is used to create 
+                {header: {subheader: [entries as tuples]}}. Not sure what this
+                structure will actually be useful for, though it is used to create
                 the df-long format.
             save_contents: bool. Whether to save output to disk.
         """
@@ -199,7 +198,6 @@ class HansardParser(object):
         attributes.remove('metadata')
         attributes.remove('speaker_uid')
         contents_conv = convert_contents(contents, metadata, attributes, to_format=to_format, verbose=self.verbose > 0)
-        
         # exports to csv
         # filename = file_path.replace(input_dir,'').replace('/', '_').replace('.pdf', '')[1:]
         # TODO: check if file already exists.
@@ -215,18 +213,18 @@ class HansardParser(object):
 
     def _process_meta(self, metadata=None, max_check=50):
         """Extracts meta-data from the transcript.
-        
+
         Arguments:
             contents : list
                 a list containing the body.contents of a bs4 object.
             max_check : int representing number of lines to check.
-        
+
         Returns:
             metadata : Sitting object
                 Sitting object as defined in Sitting.py
 
         TODO:
-            * don't need to check all max_check lines. Just check until 
+            * don't need to check all max_check lines. Just check until
                 metadata is complete.
 
         """
@@ -235,11 +233,6 @@ class HansardParser(object):
         # if not self.metadata_exists(contents, max_check):
         #     return metadata
         metadata = self._extract_metadata(metadata, max_check)
-        try:
-            metadata.parliament = get_parliament_num(metadata.date)
-        except AttributeError:
-            if self.verbose:
-                print('WARNING: Metadata has no parliament')
         if metadata.date is None:
             print('WARNING: No date found in transcript.')
         # print(metadata)
@@ -248,23 +241,23 @@ class HansardParser(object):
 
 
     def _metadata_exists(self, contents=None):
-        """boolean function that returns True if metadata exists in this 
+        """boolean function that returns True if metadata exists in this
         document. """
         raise NotImplementedError
 
     def _add_to_meta(self, line, metadata):
-        """Attempts to add the contents of line_text to the transcript 
-        metadata. 
-        
+        """Attempts to add the contents of line_text to the transcript
+        metadata.
+
         Arguments:
             line : bs4.Tag or bs4.NavigableString
                 a bs4 object containing text to be added to the metadata.
             metadata : Sitting object
                 a Sitting object as defined in sitting_class.py.
-        
+
         Returns:
-            returns 0 if line_text is None or if no update is made, otherwise 
-            returns 1 once the metadata Sitting object has been updated based 
+            returns 0 if line_text is None or if no update is made, otherwise
+            returns 1 once the metadata Sitting object has been updated based
             on line_text.
         """
         raise NotImplementedError
@@ -272,39 +265,39 @@ class HansardParser(object):
 
 
     def _process_contents(self, current_page):
-        """Takes in a list of contents and returns a processed list of merged 
-        contents. 
-        
+        """Takes in a list of contents and returns a processed list of merged
+        contents.
+
         Arguments:
             current_page : int
                 int representing current page number of transcript
-        
+
         Returns:
             contents_merged : list of Entry objects
-                a list of Entry objects representing each entry in the 
-                transcript. This list is not quite fully processed -- the 
+                a list of Entry objects representing each entry in the
+                transcript. This list is not quite fully processed -- the
                 processing steps are finished in process_html_contents().
         """
         raise NotImplementedError
 
     def _get_entry_type(self, line):
-        """Returns the entry type of line (either header, subheader, speech, 
+        """Returns the entry type of line (either header, subheader, speech,
         or scene).
-        
+
         Arguments:
             line : tag object from bs4. A single element from body.contents.
         """
         raise NotImplementedError
 
     def _get_speaker_name(self, line, entry_type, prev_entry):
-        """Returns a string representing the name of a speaker in a new 
+        """Returns a string representing the name of a speaker in a new
         speech."""
         raise NotImplementedError
 
     def _get_text(self, line, speaker, entry_type, prev_entry):
-        """Gets text from line, not including speaker name if speaker name 
-        exists. 
-        
+        """Gets text from line, not including speaker name if speaker name
+        exists.
+
         Arguments:
             line : bs4 tag
                 a bs4 tag or string.
@@ -313,8 +306,8 @@ class HansardParser(object):
             entry_type : str
                 a string representing the entry type.
             prev_entry : Entry object
-                an Entry object, as defined in entry_class.py. Should be the entry previous to line. 
-        
+                an Entry object, as defined in entry_class.py. Should be the entry previous to line.
+
         Returns:
             text: string
                 the text of the entry.

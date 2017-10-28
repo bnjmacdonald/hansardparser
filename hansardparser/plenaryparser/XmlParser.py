@@ -1,9 +1,9 @@
-"""Defines the XmlParser class. 
+"""Defines the XmlParser class.
 
-Parses a pdf Kenya Hansard transcript into a list of Entry objects, 
-which can than be converted into a dictonary or Pandas DataFrame 
+Parses a pdf Kenya Hansard transcript into a list of Entry objects,
+which can than be converted into a dictonary or Pandas DataFrame
 using the hansard_convert.py module. Module was initially built
-based on April 11th, 2006 transcript. 
+based on April 11th, 2006 transcript.
 """
 
 import os
@@ -13,27 +13,26 @@ import copy
 from bs4 import BeautifulSoup, Tag, NavigableString
 
 import settings
-from server.hansardparser import xml_to_pdf 
-from server.hansardparser.Entry import Entry
-from server.hansardparser.Sitting import Sitting
-from server.hansardparser.HansardParser import HansardParser
-from server.hansardparser import utils
-from server.rawdatamgr.utils import get_parliament_num
+from plenaryparser import xml_to_pdf
+from plenaryparser.Entry import Entry
+from plenaryparser.Sitting import Sitting
+from plenaryparser.HansardParser import HansardParser
+from plenaryparser import utils
 
 class XmlParser(HansardParser):
-    """The Hansard_parser contains methods for parsing an Hansard PDF into 
+    """The Hansard_parser contains methods for parsing an Hansard PDF into
     txt or html.
-    
+
     Attributes:
         verbose : bool
-            False by default. Set to True if detailed output to console is 
+            False by default. Set to True if detailed output to console is
             desired.
         parliament_dates : dict like {int -> (datetime, datetime)}
-            dictionary of parliaments-date pairs. Gives range of dates for 
-            each parliament. 
+            dictionary of parliaments-date pairs. Gives range of dates for
+            each parliament.
         italic_phrases : list of strings
-            List containing strings that appear as italic phrases in speeches, 
-            but which should not be treated as a scene entry_type. 
+            List containing strings that appear as italic phrases in speeches,
+            but which should not be treated as a scene entry_type.
     """
 
     def __init__(self, italic_phrases=None, verbose=0):
@@ -83,7 +82,7 @@ class XmlParser(HansardParser):
 
     def _extract_metadata(self, metadata, max_check):
         """extracts metadata from the initial lines in contents."""
-        
+
         first_page_contents = self.soup.find('page', {'number': 1}).contents
         max_check = min(max_check, len(first_page_contents))
         first_page_contents = first_page_contents[:max_check]
@@ -104,20 +103,26 @@ class XmlParser(HansardParser):
             # print(checked, metadata.is_incomplete())
             # else:
                 # checked += 1
+        # combines date and time.
+        if metadata.date is not None:
+            if metadata.time is not None:
+                regex = re.search(r'(?P<hour>\d{1,2})\.(?P<min>\d{1,2})', metadata.time)
+                metadata.date = metadata.date.replace(hour=int(regex.group('hour')), minute=int(regex.group('min')))
+            del metadata.time
         return metadata
 
     def _add_to_meta(self, line, metadata):
-        """Attempts to add the contents of line_text to the transcript metadata. 
-        
+        """Attempts to add the contents of line_text to the transcript metadata.
+
         Arguments:
             line_text : str
                 a string containing text to be added to the metadata.
             metadata : Sitting object
                 a Sitting object as defined in sitting_class.py.
-        
+
         Returns:
-            returns 0 if line_text is None or if no update is made, otherwise 
-            returns 1 once the metadata Sitting object has been updated based 
+            returns 0 if line_text is None or if no update is made, otherwise
+            returns 1 once the metadata Sitting object has been updated based
             on line_text.
         """
         line_text = line.text.strip() if isinstance(line, Tag) else line.string.strip()
@@ -140,7 +145,7 @@ class XmlParser(HansardParser):
             metadata.date = utils.convert_str_to_date(line_text)
             return True
         if re.match(r'^(Monday|Tuesday|Wednesday|Thursday|Friday)', line_text) and len(line_text) < 70:
-            # line.next_sibling.text.strip() in ('th', 'st', 'nd', 'rd') and 
+            # line.next_sibling.text.strip() in ('th', 'st', 'nd', 'rd') and
             if utils.is_str_date(line_text):
                 metadata.date = utils.convert_str_to_date(line_text)
                 return True
@@ -166,17 +171,17 @@ class XmlParser(HansardParser):
 
 
     def _process_contents(self, current_page):
-        """Processes the contents of a transcript in xml format and returns a 
+        """Processes the contents of a transcript in xml format and returns a
         list of cleaned Entries.
 
-        NOTE: prev_prev_entry is used for concatenating speeches that are 
-        split by one scene entry. This causes scene entries to end up at the 
+        NOTE: prev_prev_entry is used for concatenating speeches that are
+        split by one scene entry. This causes scene entries to end up at the
         END of each speech. So it is still possible to count the number of applauses, et cetera for a given speech, but this approach makes it much harder to determine exactly what was being applauded.
-        
+
         Arguments:
             current_page : int
                 int representing current page number of transcript
-        
+
         Returns:
             contents_merged : list of Entry objects
                 a processed and cleaned list of Entry objects representing each entry in the transcript.
@@ -204,7 +209,7 @@ class XmlParser(HansardParser):
                 if len(line.findChildren()) > 1 and self.verbose > 1:
                     print('WARNING: line in page has more than 1 child:\n{0}'.format(line))
                 # check for page number, heading, date.
-                if j < 10: 
+                if j < 10:
                     if utils.is_page_number(line_text):
                         page_number = line.text.strip()
                         if self.verbose > 1:
@@ -292,11 +297,11 @@ class XmlParser(HansardParser):
             entry = contents_entries2.pop(0)
             if prev_entry.can_merge(entry) and len(contents_merged):
                 prev_entry.merge_entries(entry, self.verbose)
-                contents_merged[-1] = prev_entry 
+                contents_merged[-1] = prev_entry
             else:
                 contents_merged.append(entry)
                 prev_entry = entry
-        
+
         # iterates through contents_merged backwards, merging speeches.
         # contents_merged_final = []
         # entry = contents_merged.pop()
@@ -328,7 +333,7 @@ class XmlParser(HansardParser):
                 # entry.text = None
             contents_merged2.append(entry)
 
-        # converts "QUORUM" headers to scenes. 
+        # converts "QUORUM" headers to scenes.
         # Note: kludgy that this is not done in self._get_entry_type, but it
         # is easier to check for once the "Q" and "UORUM" text has been
         # concatenated.
@@ -337,13 +342,13 @@ class XmlParser(HansardParser):
                 entry.entry_type = 'scene'
                 entry.text = '(' + entry.text.lower() + ')'
 
-        # fixes issue in which header text is spaced out 
+        # fixes issue in which header text is spaced out
         # (e.g. "EXTENSION OF S ITING H OURS".
         for entry in contents_merged2:
             if entry.entry_type in ('header', 'subheader'):
                 entry.text = utils.fix_header_words(entry.text)
 
-        # fixes issue of numbers/punctuation being 
+        # fixes issue of numbers/punctuation being
         # classified as a header or subheader.
         contents_merged3 = []
         prev_entry = Entry()
@@ -371,9 +376,9 @@ class XmlParser(HansardParser):
     def _get_entry_type(self, line):
         """Returns the entry type of line (either header, subheader, speech,
         or scene).
-        
+
         Arguments:
-            line : tag object from bs4 
+            line : tag object from bs4
                 A single element from body.contents.
         """
         # days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
@@ -400,7 +405,7 @@ class XmlParser(HansardParser):
             len(b_tags) and
             not line_text.endswith('.')
         )
-        
+
         # header_test = header_test1 or header_test2
         if header_test and len(utils.rm_punct(line_text)) < 5 and re.search(r'\d', line_text):
             prev_entry_type = self._get_entry_type(line.prev_sibling)
@@ -417,7 +422,7 @@ class XmlParser(HansardParser):
             prev_entry_type = self._get_entry_type(line.prev_sibling)
             next_entry_type = self._get_entry_type(line.next_sibling)
             subheader_test = prev_entry_type == 'subheader' or next_entry_type == 'subheader'
-        
+
         # SUBSUBHEADER TESTS
         subsubheader_test = bool(
             re.search(r'^clause|^question no|^\(the house resumed\)|^(first|second|third|fourth|fifth|sixth) schedule$', line_text, re.IGNORECASE) and
@@ -542,9 +547,9 @@ class XmlParser(HansardParser):
         return speaker_name
 
     def _get_text(self, line):
-        """Gets text from line, not including speaker name if speaker name 
-        exists. 
-        
+        """Gets text from line, not including speaker name if speaker name
+        exists.
+
         Arguments:
             line : bs4 tag
                 a bs4 tag or string.
@@ -552,7 +557,7 @@ class XmlParser(HansardParser):
                 a string representing the entry type.
             prev_entry : Entry object
                 an Entry object, as defined in entry_class.py. Should be the entry previous to line.
-        
+
         Returns:
             text : string
                 the text of the entry.
