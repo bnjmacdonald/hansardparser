@@ -14,10 +14,10 @@ import re
 from bs4 import BeautifulSoup, Tag
 import warnings
 
-from plenaryparser.Entry import Entry
-from plenaryparser.Sitting import Sitting
-from plenaryparser.hansard_parser import HansardParser
-from plenaryparser import utils
+from hansardparser.plenaryparser.Entry import Entry
+from hansardparser.plenaryparser.Sitting import Sitting
+from hansardparser.plenaryparser.hansard_parser import HansardParser
+from hansardparser.plenaryparser import utils
 
 class HtmlParser(HansardParser):
     """The Hansard_parser contains methods for parsing an Hansard PDF into

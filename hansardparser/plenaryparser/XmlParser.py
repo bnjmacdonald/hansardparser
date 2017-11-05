@@ -13,11 +13,11 @@ import copy
 from bs4 import BeautifulSoup, Tag, NavigableString
 
 import settings
-from plenaryparser import xml_to_pdf
-from plenaryparser.Entry import Entry
-from plenaryparser.Sitting import Sitting
-from plenaryparser.HansardParser import HansardParser
-from plenaryparser import utils
+from hansardparser.plenaryparser import xml_to_pdf
+from hansardparser.plenaryparser.Entry import Entry
+from hansardparser.plenaryparser.Sitting import Sitting
+from hansardparser.plenaryparser.HansardParser import HansardParser
+from hansardparser.plenaryparser import utils
 
 class XmlParser(HansardParser):
     """The Hansard_parser contains methods for parsing an Hansard PDF into

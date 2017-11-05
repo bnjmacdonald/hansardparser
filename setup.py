@@ -7,7 +7,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md')) as readme:
 setup(
     name='hansardparser',
     version='0.0.1',
-    packages=['hansardparser'],
+    packages=['hansardparser', 'hansardparser.plenaryparser', 'hansardparser.scrapers'],
     # include_package_data=True,
     license='MIT',
     description='A package for parsing Kenya Hansard transcripts',

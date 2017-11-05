@@ -7,7 +7,7 @@ Each Entry object represents a single entry from a transcript, which can either 
 # from abc import ABCMeta, abstractmethod
 import re
 import numpy as np
-from plenaryparser.utils import clean_speaker_name
+from hansardparser.plenaryparser.utils import clean_speaker_name
 
 class Entry(object):
     """An entry in a Hansard transcript.

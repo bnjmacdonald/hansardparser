@@ -7,7 +7,7 @@ import pytz
 import string
 import re
 import calendar
-from plenaryparser.text_utils import is_english_word
+from hansardparser.plenaryparser.text_utils import is_english_word
 
 def get_file_paths(input_dirs, verbose=0):
     file_paths = []
