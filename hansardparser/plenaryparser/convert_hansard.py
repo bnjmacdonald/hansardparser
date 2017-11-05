@@ -85,9 +85,9 @@ def contents_to_2darray(contents, attributes, metadata_values, verbose):
     #         warnings.warn('More than 5 entries encountered before first header', RuntimeWarning)
 
     # contents.insert(0, entry)  # re-insert first header back into contents.
-    current_header = 'no_heading'
-    current_subheader = 'no_subheading'
-    current_subsubheader = 'no_subsubheading'
+    current_header = None
+    current_subheader = None
+    current_subsubheader = None
     data = []
     # transcript_dict[(i, current_header, current_subheader, current_subsubheader)] = []
     # transcript_dict[current_header][current_subheader] = collections.OrderedDict()
@@ -99,11 +99,11 @@ def contents_to_2darray(contents, attributes, metadata_values, verbose):
                 data.append([current_header, current_subheader, current_subsubheader] + [None]*len(attributes) + metadata_values)
             if entry.entry_type == 'header':
                 current_header = entry.text
-                current_subheader = 'no_subheading'
-                current_subsubheader = 'no_subsubheading'
+                current_subheader = None
+                current_subsubheader = None
             elif entry.entry_type == 'subheader':
                 current_subheader = entry.text
-                current_subsubheader = 'no_subsubheading'
+                current_subsubheader = None
             elif entry.entry_type == 'subsubheader':
                 current_subsubheader = entry.text
         elif entry.entry_type == 'scene':
