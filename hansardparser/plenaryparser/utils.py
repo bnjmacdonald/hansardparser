@@ -33,9 +33,9 @@ def get_file_paths(input_dirs, verbose=0):
         #         if len(f) > 3 and f[:4] in years:
         #             file_paths.append('/'.join([input_dir, f]))
     return file_paths
-    
+
 def is_str_date(s):
-    """Tests whether a string (s) can be converted to a datetime object based 
+    """Tests whether a string (s) can be converted to a datetime object based
     on a format like '%A, %dth %B, %Y'."""
     if date_search(s.strip()):
         return True
@@ -61,7 +61,7 @@ def convert_str_to_date(s):
     return result
 
 def date_search(s):
-    """searches for date in string (s). Returns re.search object if found. 
+    """searches for date in string (s). Returns re.search object if found.
     Returns None otherwise.
     """
     months = '|'.join(calendar.month_name)[1:]
@@ -72,10 +72,11 @@ def date_search(s):
 def clean_text(s):
     """Removes extra whitespace from a string."""
     # text = text.replace('\n', ' ')
-    if s is not None:
-        s = re.sub(r'[ \t]+', ' ', s.strip())
-        while len(s) and s[0] in [')', ':']:
-            s = s[1:]
+    if s is None:
+        return None
+    s = re.sub(r'[ \t]+', ' ', s.strip())
+    while len(s) and s[0] in [')', ':']:
+        s = s[1:]
     if s == '(':
         s = ''
     return s
@@ -145,10 +146,10 @@ def is_page_number(text):
     Returns True if so.
 
     TODO:
-        * find out if this if-else is really necessary. Motivation is that 
-            sometimes a number will appear in a heading, so it would be 
-            nice to check if the span is regular text. But it's also 
-            possible that the line is a page number with no span, so the 
+        * find out if this if-else is really necessary. Motivation is that
+            sometimes a number will appear in a heading, so it would be
+            nice to check if the span is regular text. But it's also
+            possible that the line is a page number with no span, so the
             if-else allows flexibility here.
     """
     # line_text = line.text.strip()
@@ -178,14 +179,14 @@ def get_transcript_heading(text):
     return re.sub(r'\s+', ' ', heading_test.search(test_text).group())
 
 def extract_parenth_name(text, name_at_begin=True):
-    """Extracts a name in parentheses from the beginning of a speech. 
+    """Extracts a name in parentheses from the beginning of a speech.
 
     Returns:
         the name and the following text.
     """
     if name_at_begin:
         parenth_reg = re.compile(r'^\s*(?P<in_parenth>\(.+\))\s*:\s*(?P<out_parenth>.*)', re.DOTALL)
-    else: 
+    else:
         parenth_reg = re.compile(r'^\s*(?P<out_parenth>.*)\s*\((?P<in_parenth>.+)\)', re.DOTALL)
     result = parenth_reg.match(text)
     if result is None:
@@ -205,7 +206,7 @@ def clean_speaker_name(name):
     return speaker_name
 
 def parse_speaker_name(name):
-    """decomposes speaker name into "speaker_cleaned", "title", and 
+    """decomposes speaker name into "speaker_cleaned", "title", and
     "appointment".
     """
     if name is None:
@@ -216,8 +217,8 @@ def parse_speaker_name(name):
     # extracts name from parenthesis (if applicable)
     if '(' in name:
         name, appt = extract_parenth_name(name, name_at_begin=False)
-    # removes punctuation.  
-    # NOTE TO SELF: may want to remove additional punctuation 
+    # removes punctuation.
+    # NOTE TO SELF: may want to remove additional punctuation
     name = rm_punct(name)
     appt = rm_punct(appt)
     # removes titles.
@@ -226,7 +227,7 @@ def parse_speaker_name(name):
     if matches is not None:
         name = matches.group('name').strip()
         title = matches.group('title').strip()
-    # NOTE TO SELF: "if name is not None" is a kludge. 
+    # NOTE TO SELF: "if name is not None" is a kludge.
     if name is not None:
         if 'speaker' in name:
             appt = name
@@ -253,13 +254,14 @@ def fix_header_words(text):
     open_punct = re.escape('([{')
     close_punct = re.escape('!),.:;?]}')
     # other_punct = '"#$%\'*+-/<=>@\\^_`|~'
-    words = re.split('\s+', text.lower())
+    text = re.sub(r"(.) ' ([A-z])([A-z]) ([A-z]+)", r"\1'\2 \3\4", text)
+    words = re.split(r'\s+', text.lower())
     new_words = []
     while len(words):
         word = words.pop(0)
-        word_alphanum = re.sub('\W', '', word)
+        word_alphanum = re.sub(r'\W', '', word)
         # if it's a one-letter word not equal to 'a', then add it to next word.
-        if len(word_alphanum) == 1 and not re.search('.+[{0}]$'.format(re.escape(close_punct)), word):
+        if len(word_alphanum) == 1 and not re.search(r'.+[{0}]$'.format(re.escape(close_punct)), word):
             if len(words) and not word_alphanum == 'a':  #  and is_english_word(words[0])
                 next_word = words.pop(0)
                 word += next_word
@@ -281,7 +283,7 @@ def fix_header_words(text):
 def rm_wrapping_punct(s):
     """removes punctuation "wrapping" a string. String must start and end
     with a single punctuation.
-    
+
     Examples::
         "(Mr. Kariuki)" => "Mr. Kariuki"
         "[Some text." => "Some text"
