@@ -1,6 +1,6 @@
 """Defines the Entry class used in hansard_parser.py.
 
-Each Entry object represents a single entry from a transcript, which can either be a heading, subheading, scene, or speech. 
+Each Entry object represents a single entry from a transcript, which can either be a heading, subheading, scene, or speech.
 
 """
 
@@ -11,10 +11,10 @@ from hansardparser.plenaryparser.utils import clean_speaker_name
 
 class Entry(object):
     """An entry in a Hansard transcript.
-    
+
     Attributes:
         entry_type: str
-            One of X entry types: 'page_number', 'page_heading', 'page_date', 
+            One of X entry types: 'page_number', 'page_heading', 'page_date',
             'header', 'subheader', 'subsubheader', speech_new', 'speech_ctd', 'scene'
         text: str
             text of the entry.
@@ -23,14 +23,12 @@ class Entry(object):
         page_number: int
             page number of the entry.
         position: int
-            position index of the entry relative to other entries. 
-        speaker_uid : int
-            unique ID for speaker.
+            position index of the entry relative to other entries.
     """
 
     # __metaclass__ = ABCMeta
 
-    def __init__(self, entry_type=None, text=None, speaker=None, speaker_cleaned=None, page_number=None, position=None, metadata=None, speaker_uid=None, title=None, appointment=None):
+    def __init__(self, entry_type=None, text=None, speaker=None, speaker_cleaned=None, page_number=None, position=None, title=None, appointment=None):
         # NOTE TO SELF: attributes to add:
         #   speaker ID
         self.entry_type = entry_type
@@ -39,8 +37,6 @@ class Entry(object):
         self.speaker_cleaned = speaker_cleaned
         self.page_number = page_number
         self.position = position
-        self.metadata = metadata
-        self.speaker_uid = speaker_uid
         self.title = title
         self.appointment = appointment
 
@@ -50,10 +46,8 @@ class Entry(object):
         #     '\nPage number: ' +  str(self.page_number) + \
         #     '\nEntry type: ' + str(self.entry_type) + \
         #     '\nSpeaker: ' + str(self.speaker) + \
-        #     '\nSpeaker UID: ' +  str(self.speaker_uid) + \
         #     '\nText: ' +  str(self.text) + \
-        #     '\nMetadata: ' + str(self.metadata)
-    
+
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
@@ -64,14 +58,14 @@ class Entry(object):
 
 
     def can_merge(self, next_entry):
-        """ Returns True if two entries can be merged together. 
+        """ Returns True if two entries can be merged together.
 
         next_entry must come after self.
 
         NOTE TO SELF: may also want to check if next_entry comes immediately after self.
-        
+
         NOTE TO SELF: will need to deal with problems where same speaker is spelled somewhat differently.
-        
+
         NOTE TO SELF: add flexibility to this function for fuzzy matching.
         """
         if next_entry.entry_type == 'punct':
@@ -106,13 +100,13 @@ class Entry(object):
                     return True
                 # else:
                 #     print(self.text, next_entry.text)
-            else: 
+            else:
                 return True
         return False
 
 
     def merge_entries(self, next_entry, verbose=0):
-        """Merges two entries. 
+        """Merges two entries.
 
         The second argument is an entry that comes AFTER the first entry.
         """
@@ -122,7 +116,7 @@ class Entry(object):
         #     self.text = ''
         # if next_entry.text is None:
         #     next_entry.text = ''
-        
+
         if not self.can_merge(next_entry):
             raise RuntimeError('Entries cannot be merged, perhaps because they do not have the same entry_type or same speaker.')
 
@@ -130,8 +124,8 @@ class Entry(object):
         #     self.text = self.text + next_entry.text
         self.text = self.text + ' ' + next_entry.text
 
-        # NOTE TO SELF: need to make this fuzzy matching more rigorous. Also need to better coordinate it with can_merge. Issue is that sometimes speaker from first entry is preferred, whereas other times speaker from next_entry is preferred. 
-    
+        # NOTE TO SELF: need to make this fuzzy matching more rigorous. Also need to better coordinate it with can_merge. Issue is that sometimes speaker from first entry is preferred, whereas other times speaker from next_entry is preferred.
+
         if next_entry.speaker is None:
             next_entry.speaker = self.speaker
         if self.speaker != next_entry.speaker:
@@ -141,14 +135,14 @@ class Entry(object):
                 self.speaker = next_entry.speaker
             elif len(self.speaker) < len(next_entry.speaker):
                 raise RuntimeError('Entries have same speaker length but are not equal.')
-        # TODO: fix this kludge. 
+        # TODO: fix this kludge.
         self.speaker = clean_speaker_name(self.speaker)
         next_entry.speaker = clean_speaker_name(next_entry.speaker)
         return 0
 
     # def to_list(self):
     #     """ Returns entry values as a list. """
-    
+
 
 # class Header(Entry):
 #     """ A header object in a Hansard transcript. """

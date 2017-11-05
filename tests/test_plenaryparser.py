@@ -12,6 +12,7 @@ import re
 import datetime
 import pytz
 import calendar
+import pandas as pd
 from bs4 import BeautifulSoup
 
 import settings
@@ -555,8 +556,6 @@ class ParseHansardTests(unittest.TestCase):
             metadata, contents = parser.process_transcript(
                 file_path=os.path.join(self.base_dir, filename),
                 save_soup=False,
-                rm_whitespace=True,
-                append_meta=True,
                 to_format='df-long',
             )
             print(filename)
@@ -566,6 +565,10 @@ class ParseHansardTests(unittest.TestCase):
             self.assertEqual(contents.speaker.apply(lambda x: x in self.day_endings).sum(), 0)
             # no speaker names should have digits in them.
             self.assertEqual(contents.speaker.apply(lambda x: bool(re.search(r'\d+', x)) if x is not None else False).sum(), 0)
+            # no entries should have text == None.
+            self.assertEqual(contents.text.apply(lambda x: pd.isnull(x) or len(x) == 0).sum(), 0)
+            # no entry types should be None.
+            self.assertEqual(contents.entry_type.isnull().sum(), 0)
 
     def test_xml_get_entry_type(self):
         for l, true_entry_type in self.entry_types:

@@ -3,17 +3,12 @@
 """
 
 import os
-import re
-import collections
-import copy
-import warnings
-import numpy as np
 import pandas as pd
 
 from hansardparser.plenaryparser import utils
 
 
-def convert_contents(contents, metadata, attributes, to_format, verbose=False):
+def convert_contents(contents, attributes, to_format, verbose=False):
     """converts raw contents to a specified format.
 
     Arguments:
@@ -21,8 +16,6 @@ def convert_contents(contents, metadata, attributes, to_format, verbose=False):
             list of entries as output by HansardParser._process_transcript.
         attributes : list of str
             list of Entry attributes that are desired for the output.
-        metadata : Sitting obj.
-            Sitting object as defined in Sitting.py.
         to_format : str
             Desired output format. Either 'list', 'df-raw', or 'df-long'.
             'df-raw' is a pandas dataframe where each row is an entry. This format is more useful for comparing the parsed transcript to the original pdf for errors.
@@ -31,46 +24,43 @@ def convert_contents(contents, metadata, attributes, to_format, verbose=False):
         verbose : bool
             False by default. Set to True if more detailed output is desired.
     """
-    metadata_values = [metadata.__dict__[k] for k in sorted(metadata.__dict__)]
-    metadata_names = sorted(metadata.__dict__.keys())
     if to_format not in ['list', 'df-raw', 'df-long']:
         raise RuntimeError('to_format must be either \'list\', \'df-raw\', or \'df-long\'.')
     if to_format == 'list':
-        result = contents_to_2darray(contents, attributes, metadata_values, verbose)
+        result = contents_to_2darray(contents, attributes, verbose)
     if to_format == 'df-raw':
-        result = contents_to_df_raw(contents, attributes, metadata_names, metadata_values)
+        result = contents_to_df_raw(contents, attributes)
     if to_format == 'df-long':
-        result = contents_to_df_long(contents, attributes, metadata_names, metadata_values, verbose)
+        result = contents_to_df_long(contents, attributes, verbose)
     return result
 
 
-def contents_to_df_raw(contents, attributes, metadata_names, metadata_values):
+def contents_to_df_raw(contents, attributes):
     """Converts ontents to raw dataframe. """
     series = []
     for entry in contents:
         entry_list = [entry.__dict__[k] for k in sorted(entry.__dict__) if k in attributes]
-        series.append(pd.Series(entry_list + metadata_values))
+        series.append(pd.Series(entry_list))
     df = pd.concat(series, axis=1).T
     # colnames = copy.deepcopy(contents[0].__dict__.keys())
     attributes = sorted(attributes)
-    colnames = attributes + metadata_names
-    df.columns = colnames
-    df['date'] = df['date'].apply(utils.str_from_date)  # FIXME: this ignores time information.
+    df.columns = attributes
+    # df['date'] = df['date'].apply(utils.str_from_date)
     return df
 
 
-def contents_to_df_long(contents, attributes, metadata_names, metadata_values, verbose):
+def contents_to_df_long(contents, attributes, verbose):
     """converts a dictionary of contents (produced by contents_to_dict) to a
     pandas DataFrame. """
-    contents_2d = contents_to_2darray(contents, attributes, metadata_values, verbose)
+    contents_2d = contents_to_2darray(contents, attributes, verbose)
     # contents_dict_mod = collections.OrderedDict()
-    columns = ['header', 'subheader', 'subsubheader'] + attributes + metadata_names
+    columns = ['header', 'subheader', 'subsubheader'] + attributes
     df = pd.DataFrame(contents_2d, columns=columns)
-    df['date'] = df['date'].apply(utils.str_from_date)
+    # df['date'] = df['date'].apply(utils.str_from_date)
     return df
 
 
-def contents_to_2darray(contents, attributes, metadata_values, verbose):
+def contents_to_2darray(contents, attributes, verbose):
     """Converts a list of entries to a 2d array."""
     # transcript_dict = collections.OrderedDict()
     # NOTE TO SELF: this first while loop is a temporary block to pop entries until the first header is encountered. This may lose some valuable information at the beginning of the transript if for some reason the first header does not appear for a while or was not entered correctly in contents.
@@ -95,8 +85,8 @@ def contents_to_2darray(contents, attributes, metadata_values, verbose):
     for entry in contents:
         # entry = contents.pop(0)
         if entry.entry_type in ['header', 'subheader', 'subsubheader']:
-            if len(data) > 0 and data[-1][:3] != [current_header, current_subheader, current_subsubheader]:
-                data.append([current_header, current_subheader, current_subsubheader] + [None]*len(attributes) + metadata_values)
+            # if len(data) > 0 and data[-1][:3] != [current_header, current_subheader, current_subsubheader]:
+            #     data.append([current_header, current_subheader, current_subsubheader] + [None]*len(attributes))
             if entry.entry_type == 'header':
                 current_header = entry.text
                 current_subheader = None
@@ -108,10 +98,10 @@ def contents_to_2darray(contents, attributes, metadata_values, verbose):
                 current_subsubheader = entry.text
         elif entry.entry_type == 'scene':
             current_scene = [getattr(entry, attr) for attr in attributes]
-            data.append([current_header, current_subheader, current_subsubheader] + current_scene + metadata_values)
+            data.append([current_header, current_subheader, current_subsubheader] + current_scene)
         elif entry.entry_type in ['speech_new', 'speech_ctd']:
             current_speech = [getattr(entry, attr) for attr in attributes]
-            data.append([current_header, current_subheader, current_subsubheader] + current_speech  + metadata_values)
+            data.append([current_header, current_subheader, current_subsubheader] + current_speech)
     # if verbose and len(transcript_dict['preliminary']['no_subheading']['no_subsubheading']) > 5:
     #     warnings.warn('More than 5 entries encountered before first header', RuntimeWarning)
     return data
