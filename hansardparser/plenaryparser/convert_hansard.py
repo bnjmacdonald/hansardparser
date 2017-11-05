@@ -10,7 +10,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from plenaryparser import utils
+from hansardparser.plenaryparser import utils
 
 
 def convert_contents(contents, metadata, attributes, to_format, verbose=False):
@@ -55,7 +55,7 @@ def contents_to_df_raw(contents, attributes, metadata_names, metadata_values):
     attributes = sorted(attributes)
     colnames = attributes + metadata_names
     df.columns = colnames
-    df['date'] = df['date'].apply(utils.str_from_date)
+    df['date'] = df['date'].apply(utils.str_from_date)  # FIXME: this ignores time information.
     return df
 
 

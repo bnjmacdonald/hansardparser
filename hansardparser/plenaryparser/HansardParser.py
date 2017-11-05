@@ -5,6 +5,7 @@ into a dictonary or Pandas DataFrame using the
 hansard_convert.py module.
 
 Notes:
+
     This implementation was inspired in part by: https://github.com/mysociety/pombola/blob/master/pombola/hansard/kenya_parser.py
 
     The basic pipeline of the HansardParser class is as follows:
@@ -12,6 +13,10 @@ Notes:
         (b) extract Hansard metadata (process_html_meta).
         (c) for each line/tag, create an entry object (process_html_contents).
         (d) clean/process list of entries (process_html_contents).
+
+Todos:
+
+    TODO: convert sitting start_page to int.
 """
 
 from datetime import datetime
@@ -21,9 +26,9 @@ import time
 import traceback
 
 import settings
-from plenaryparser.Sitting import Sitting
-from plenaryparser import utils
-from plenaryparser.convert_hansard import convert_contents
+from hansardparser.plenaryparser.Sitting import Sitting
+from hansardparser.plenaryparser import utils
+from hansardparser.plenaryparser.convert_hansard import convert_contents
 
 class HansardParser(object):
     """ The HansardParser class contains methods for parsing
