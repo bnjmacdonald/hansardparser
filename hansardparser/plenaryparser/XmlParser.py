@@ -6,16 +6,12 @@ using the hansard_convert.py module. Module was initially built
 based on April 11th, 2006 transcript.
 """
 
-import os
 import re
 import warnings
-import copy
-from bs4 import BeautifulSoup, Tag, NavigableString
+from bs4 import Tag
 
-import settings
 from hansardparser.plenaryparser import xml_to_pdf
 from hansardparser.plenaryparser.Entry import Entry
-from hansardparser.plenaryparser.Sitting import Sitting
 from hansardparser.plenaryparser.HansardParser import HansardParser
 from hansardparser.plenaryparser import utils
 
@@ -82,7 +78,6 @@ class XmlParser(HansardParser):
 
     def _extract_metadata(self, metadata, max_check):
         """extracts metadata from the initial lines in contents."""
-
         first_page_contents = self.soup.find('page', {'number': 1}).contents
         max_check = min(max_check, len(first_page_contents))
         first_page_contents = first_page_contents[:max_check]
@@ -207,7 +202,8 @@ class XmlParser(HansardParser):
                 if line.name is None or line.text is None or line.text.strip() is u'':
                     continue
                 if len(line.findChildren()) > 1 and self.verbose > 1:
-                    print('WARNING: line in page has more than 1 child:\n{0}'.format(line))
+                    msg = 'line in page has more than 1 child:\n{0}'.format(line)
+                    warnings.warn(msg, RuntimeWarning)
                 # check for page number, heading, date.
                 if j < 10:
                     if utils.is_page_number(line_text):
@@ -260,13 +256,39 @@ class XmlParser(HansardParser):
                     entry.speaker = current_speaker
                 else:
                     if self.verbose:
-                        print('WARNING: continued speech already has a speaker.')
+                        warnings.warn('continued speech already has a speaker.', RuntimeWarning)
                         print('continued speech: ', entry)
                     if entry.speaker != current_speaker:
                         if self.verbose:
-                            print('WARNING: new speech speaker different than continued speech speaker.')
+                            warnings.warn('new speech speaker different than continued speech speaker.', RuntimeWarning)
                             print('new speech speaker: ', current_speaker)
                             print('continued speech: ', entry)
+        contents_merged = self.__postprocess_contents(contents_entries)
+        return contents_merged
+
+    def __postprocess_contents(self, contents_entries):
+        """Processes contents at the end of self._process_contents.
+
+        Cleans up the structure of headings/subhead/subsubheadings, merges
+        new speeches with continued speeches wherever possible, removes
+        useless entries (e.g. entries with text == None), and does several
+        other tasks that improves the quality of the output.
+
+        Arguments:
+
+            contents_entries: list of Entry objects. A processed and cleaned
+                list of Entry objects representing each entry in the transcript.
+        
+        Returns:
+
+            contents_merged: 
+        Todos:
+
+            TODO: decompose and simplify this method. It ends with many
+                loops over the merged contents to fix old bugs. These bug fixes
+                can probably be refactored and streamlined into a smaller number
+                of loops.
+        """
         # converts "special_header" to header or subheader depending on position
         # in text.
         contents_entries2 = []
@@ -293,7 +315,7 @@ class XmlParser(HansardParser):
         # merges entries as appropriate.
         contents_merged = []
         prev_entry = Entry()
-        while len(contents_entries2):
+        while len(contents_entries2) > 0:
             entry = contents_entries2.pop(0)
             if prev_entry.can_merge(entry) and len(contents_merged):
                 prev_entry.merge_entries(entry, self.verbose)
@@ -341,10 +363,8 @@ class XmlParser(HansardParser):
             if entry.entry_type == 'header' and entry.text.lower() in ['quorum', 'quorom']:
                 entry.entry_type = 'scene'
                 entry.text = '(' + entry.text.lower() + ')'
-
-        # fixes issue in which header text is spaced out
-        # (e.g. "EXTENSION OF S ITING H OURS".
-        for entry in contents_merged2:
+            # fixes issue in which header text is spaced out
+            # (e.g. "EXTENSION OF S ITING H OURS".
             if entry.entry_type in ('header', 'subheader'):
                 entry.text = utils.fix_header_words(entry.text)
 
@@ -366,11 +386,17 @@ class XmlParser(HansardParser):
             contents_merged3.append(entry)
             prev_entry = entry
 
-        # assigns position to each entry.
-        for i, entry in enumerate(contents_merged3):
-            entry.position = i
-
-        return contents_merged3
+        # cleans text.
+        contents_merged4 = []
+        while len(contents_merged3):
+            entry = contents_merged3.pop(0)
+            entry.text = utils.clean_text(entry.text)
+            contents_merged4.append(entry)
+            # if entry.entry_type in ['header', 'subheader', 'subsubheader']:
+            #     contents_merged4.append(entry)
+            # elif entry.text is not None and len(entry.text) > 0:
+            #     contents_merged4.append(entry)
+        return contents_merged4
 
 
     def _get_entry_type(self, line):
@@ -519,7 +545,8 @@ class XmlParser(HansardParser):
         """
         if entry_type == 'speech_new':
             if len(line.find_all('b')) > 1 and self.verbose > 1:
-                print('WARNING: more than one <b> tag in line: {0}'.format(line))
+                msg = 'more than one <b> tag in line: {0}'.format(line)
+                warnings.warn(msg, RuntimeWarning)
             speaker_name = line.find('b').extract().text.strip()
             # speaker_name = b_tags[0].text.strip() if len(b_tags) else line.text.strip()
             # condition 1: b tag text is simply '[name]:'.

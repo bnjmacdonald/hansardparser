@@ -19,13 +19,9 @@ Todos:
     TODO: convert sitting start_page to int.
 """
 
-from datetime import datetime
-import os
-import sys
+import warnings
 import time
-import traceback
 
-import settings
 from hansardparser.plenaryparser.Sitting import Sitting
 from hansardparser.plenaryparser import utils
 from hansardparser.plenaryparser.convert_hansard import convert_contents
@@ -110,17 +106,13 @@ class HansardParser(object):
         self.verbose = verbose
         self.soup = None
 
-    def process_transcript(self, file_path, save_soup=False, path=None, rm_whitespace=True, append_meta=True, to_format='df-long'):
+    def process_transcript(self, file_path, save_soup=False, path=None, to_format='df-long'):
         """wrapper for processing a list of transcript bs4 contents.
 
         Arguments:
             file_path: str. location of transcript to parse.
             save_soup: bool. Default: False. If True, saves soup to disk.
             path: str. Path to save soup to disk.
-            rm_whitespace : bool
-                True by default. Removes excess whitespace and line breaks.
-            append_meta : bool
-                True by default. Adds metadata to each entry in contents.
             to_format: str. See self._convert_contents. If None, contents are
                 not converted at all (i.e. they are left as a list of Entry
                 objects).
@@ -138,15 +130,8 @@ class HansardParser(object):
         self._preprocess_soup()
         metadata = self._process_meta()
         contents = self._process_contents(metadata.start_page)
-        if append_meta:
-            for entry in contents:
-                entry.metadata = metadata
-        # cleans text (removes whitespace).
-        if rm_whitespace:
-            for entry in contents:
-                entry.text = utils.clean_text(entry.text)
         if to_format is not None:
-            contents = self._convert_contents(contents, metadata, to_format=to_format)
+            contents = self._convert_contents(contents, to_format=to_format)
         time1 = time.time()
         if self.verbose:
             print('Processed "{0}" in {1:.2f} seconds.'.format(file_path.split('/')[-1], time1 - time0))
@@ -176,7 +161,7 @@ class HansardParser(object):
         #     print(traceback.format_exc())
 
 
-    def _convert_contents(self, contents, metadata, to_format='df-long'):
+    def _convert_contents(self, contents, to_format='df-long'):
         """converts list of hansard contents to df-long, df-raw, or dict.
 
         Arguments:
@@ -200,9 +185,7 @@ class HansardParser(object):
         """
         # NOTE TO SELF: two .remove lines below are kind of a kludge. Should make this cleaner.
         attributes = list(contents[0].__dict__.keys())
-        attributes.remove('metadata')
-        attributes.remove('speaker_uid')
-        contents_conv = convert_contents(contents, metadata, attributes, to_format=to_format, verbose=self.verbose > 0)
+        contents_conv = convert_contents(contents, attributes, to_format=to_format, verbose=self.verbose > 0)
         # exports to csv
         # filename = file_path.replace(input_dir,'').replace('/', '_').replace('.pdf', '')[1:]
         # TODO: check if file already exists.
@@ -210,7 +193,7 @@ class HansardParser(object):
         #     hansard_convert.export_contents(filename, contents_conv, output_dir, input_format=_DATA_FORMAT, output_format='hdf')
         return contents_conv
 
-    def _convert_pdf(self, file_path):
+    def _convert_pdf(self, file_path, *args, **kwargs):
         raise NotImplementedError
 
     def _preprocess_soup(self):
@@ -239,11 +222,14 @@ class HansardParser(object):
         #     return metadata
         metadata = self._extract_metadata(metadata, max_check)
         if metadata.date is None:
-            print('WARNING: No date found in transcript.')
+            warnings.warn('No date found in transcript.', RuntimeWarning)
         # print(metadata)
         # print(contents[0:10])
         return metadata
 
+    def _extract_metadata(self, metadata, max_check):
+        """extracts metadata from the initial lines in contents."""
+        raise NotImplementedError
 
     def _metadata_exists(self, contents=None):
         """boolean function that returns True if metadata exists in this
