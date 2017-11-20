@@ -22,13 +22,11 @@ class Entry(object):
             name of the speaker. None is no speaker.
         page_number: int
             page number of the entry.
-        position: int
-            position index of the entry relative to other entries.
     """
 
     # __metaclass__ = ABCMeta
 
-    def __init__(self, entry_type=None, text=None, speaker=None, speaker_cleaned=None, page_number=None, position=None, title=None, appointment=None):
+    def __init__(self, entry_type=None, text=None, speaker=None, speaker_cleaned=None, page_number=None, title=None, appointment=None):
         # NOTE TO SELF: attributes to add:
         #   speaker ID
         self.entry_type = entry_type
@@ -36,7 +34,6 @@ class Entry(object):
         self.speaker = speaker
         self.speaker_cleaned = speaker_cleaned
         self.page_number = page_number
-        self.position = position
         self.title = title
         self.appointment = appointment
 

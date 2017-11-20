@@ -1,7 +1,7 @@
 """Scrapes new Hansard transcripts from the Kenya Parliament website.
 
 Example usage::
-    
+
     scraper = HansardScraper(
         outpath=settings.MEDIA_ROOT,
         headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.101 Safari/537.36'},
@@ -11,8 +11,8 @@ Example usage::
     )
     scraper.get_hansards(get_all=True)
 
-Contributors: 
-    
+Contributors:
+
 - Zacharia Mwangi contributed to this script.
 
 """
