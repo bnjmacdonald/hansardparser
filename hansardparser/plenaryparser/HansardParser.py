@@ -22,7 +22,7 @@ Todos:
 import warnings
 import time
 
-from hansardparser.plenaryparser.Sitting import Sitting
+from hansardparser.plenaryparser.models.Sitting import Sitting
 from hansardparser.plenaryparser import utils
 from hansardparser.plenaryparser.convert_hansard import convert_contents
 
