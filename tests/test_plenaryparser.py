@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 import settings
 from plenaryparser import utils
 from plenaryparser.XmlParser import XmlParser
-from plenaryparser.Entry import Entry
+from plenaryparser.models.Entry import Entry
 
 
 # # DEBUGGING:

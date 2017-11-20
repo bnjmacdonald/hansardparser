@@ -11,7 +11,7 @@ import warnings
 from bs4 import Tag
 
 from hansardparser.plenaryparser import xml_to_pdf
-from hansardparser.plenaryparser.Entry import Entry
+from hansardparser.plenaryparser.models.Entry import Entry
 from hansardparser.plenaryparser.HansardParser import HansardParser
 from hansardparser.plenaryparser import utils
 

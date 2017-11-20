@@ -14,8 +14,8 @@ import re
 from bs4 import BeautifulSoup, Tag
 import warnings
 
-from hansardparser.plenaryparser.Entry import Entry
-from hansardparser.plenaryparser.Sitting import Sitting
+from hansardparser.plenaryparser.models.Entry import Entry
+from hansardparser.plenaryparser.models.Sitting import Sitting
 from hansardparser.plenaryparser.hansard_parser import HansardParser
 from hansardparser.plenaryparser import utils
 
