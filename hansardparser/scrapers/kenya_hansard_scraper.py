@@ -11,10 +11,22 @@ Example usage::
     )
     scraper.get_hansards(get_all=True)
 
+Command line usage::
+
+    python -m hansardparser.scrapers.kenya_hansard_scraper -v 1 -o data/raw/hansards/2013-
+
 Contributors:
 
 - Zacharia Mwangi contributed to this script.
 
+Todos:
+
+    TODO: save url link to downloaded transcript so that it can be linked to
+        for users who want to see the original. (could save this in a csv with
+        the transcript name and associated url).
+    
+    TODO: add command line option for user to specify whether to overwrite
+        existing PDFs or skip downloading PDFs if the PDF already exists.
 """
 
 import os
@@ -37,6 +49,12 @@ def parse_args():
         help="verbosity (integer)"
     )
     parser.add_argument(
+        '-n',
+        '--num_pages',
+        type=int,
+        help="Only retrieve the last n pages of transcripts."
+    )
+    parser.add_argument(
         '-o',
         '--output',
         type=str,
@@ -56,7 +74,7 @@ def scrape():
         max_retries=3,
         verbose=args.verbosity
     )
-    scraper.get_hansards(get_all=True)
+    scraper.get_hansards(num_pages=args.num_pages)
 
 class HansardScraper(object):
     """Defines the HansardScraper class, which contains methods for scraping 
@@ -78,12 +96,13 @@ class HansardScraper(object):
         # self.max_retries = max_retries
         self.wait = wait
 
-    def get_hansards(self, get_all=False):
+    def get_hansards(self, num_pages=None):
         """downloads Hansard PDFs.
 
-        if get_all=True, downloads all PDFs that haven't already been
-        downloaded. Else, only downloads PDFs from first page that haven't
-        already been downloaded.
+        Arguments:
+
+            num_pages: int (default: None). Maximum number of pages to scrape
+                data from. If None, scrapes transcripts from all pages.
         """
         orig_files = os.listdir(self.outpath)
         relative_url = 'the-national-assembly/house-business/hansard'
@@ -92,16 +111,18 @@ class HansardScraper(object):
         items = self._get_items(soup)
         self._process_items(items)
         next_page_url = self._get_next_page_link(soup)
-        if get_all:
-            while next_page_url:
-                r = self._get_request(next_page_url, params={})
-                soup = BeautifulSoup(r.text, 'html5lib')
-                items = self._get_items(soup)
-                self._process_items(items)
-                next_page_url = self._get_next_page_link(soup)
+        page = 1
+        while next_page_url and (num_pages is None or page < num_pages):
+            r = self._get_request(next_page_url, params={})
+            soup = BeautifulSoup(r.text, 'html5lib')
+            items = self._get_items(soup)
+            self._process_items(items)
+            next_page_url = self._get_next_page_link(soup)
+            page += 1
         if self.verbose:
             new_files = list(set(os.listdir(self.outpath)) - set(orig_files))
             print('Downloaded {0} new files. Total files: {1}. Files downloaded: {2}'.format(len(new_files), len(os.listdir(self.outpath)), '\n'.join(new_files)))
+        return 0
 
     def _get_items(self, soup):
         """gets list of items (e.g. list of <li> tags with Hansard PDF links).
@@ -132,6 +153,7 @@ class HansardScraper(object):
             raise RuntimeError('There are no items to process.')
         for item in items:
             self._process_item(item)
+        return 0
 
     def _process_item(self, item):
         """visits href in item and downloads file (if doesn't exist already).
@@ -142,6 +164,7 @@ class HansardScraper(object):
         r = self._get_request(links[0].attrs['href'])
         fname = self._get_filename(r.headers['Content-Disposition'])
         self._download_file(r, fname)
+        return 0
 
     def _get_filename(self, s):
         """extracts filename from Content-Disposition string (s)."""
@@ -160,6 +183,7 @@ class HansardScraper(object):
             f.write(r.content)
         if self.verbose:
             print('Saved {0} to {1}.'.format(fname, self.outpath))
+        return 0
 
     def _get_next_page_link(self, soup):
         """gets the relative href for the next page."""
