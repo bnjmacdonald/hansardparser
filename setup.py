@@ -6,7 +6,7 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md')) as readme:
 
 setup(
     name='hansardparser',
-    version='0.0.1',
+    version='0.1.0',
     packages=['hansardparser', 'hansardparser.plenaryparser', 'hansardparser.plenaryparser.models', 'hansardparser.scrapers'],
     # include_package_data=True,
     license='MIT',
