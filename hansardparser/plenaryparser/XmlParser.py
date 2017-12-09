@@ -4,6 +4,17 @@ Parses a pdf Kenya Hansard transcript into a list of Entry objects,
 which can than be converted into a dictonary or Pandas DataFrame
 using the hansard_convert.py module. Module was initially built
 based on April 11th, 2006 transcript.
+
+Usage:
+
+    >>> from hansardparser.plenaryparser.XmlParser import XmlParser
+    >>> file_path = "PATH_TO_HANSARD_PDF"
+    >>> parser = XmlParser(verbose=verbose)
+    >>> sitting, contents = parser.process_transcript(
+            file_path=file_path,
+            save_soup=False,
+            to_format='df-long'
+        )
 """
 
 import re
