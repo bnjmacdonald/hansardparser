@@ -15,6 +15,6 @@ setup(
     url='https://github.com/bnjmacdonald/hansardparser',
     author='Bobbie Macdonald',
     author_email='bnjmacdonald@gmail.com',
-    install_requires = ['pandas', 'numpy', 'bs4', 'nltk', 'lxml'],
+    install_requires = ['pandas', 'numpy', 'bs4', 'nltk', 'lxml', 'requests'],
     zip_safe=False
 )
