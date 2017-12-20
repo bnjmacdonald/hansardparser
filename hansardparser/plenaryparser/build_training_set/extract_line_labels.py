@@ -31,6 +31,15 @@ class LineLabelExtractor(object):
         >>> extractor = LineLabelExtractor(verbose=3)
         >>> soup = extractor.convert_pdf(file_path, save_soup=False)
         >>> labels, lines = extractor.extract_labels(soup)
+        >>> print(labels[78:81])
+        ['speech_new', 'garbage', 'speech_ctd']
+        >>> print(lines[78:81])
+        [
+            <text font="2" height="13" left="171" top="632" width="434"><b>Mr. Wamunyinyi </b>asked the Minister for Education, Science and Technology:-</text>,
+            '\n',
+            <text font="0" height="13" left="171" top="649" width="556">(a) what the Ministry is doing to streamline the financial and administrative structures of secondary</text>
+        ]
+        
     """
 
     italic_phrases = [
