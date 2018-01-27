@@ -144,8 +144,9 @@ class LineLabelExtractor(object):
                     warnings.warn(msg, RuntimeWarning)
                 # retrieves line label
                 label = self._get_line_label(line, check_if_page_header=j < 10)
-                labels.append(label)
-                lines.append(line)
+                if label is not None:
+                    labels.append(label)
+                    lines.append(line)
                 if self.verbose > 2:
                     print('extracted {0} label from line: {1}'.format(label, line))
         assert len(labels) == len(lines), "Should have same number of labels as lines."
@@ -181,7 +182,8 @@ class LineLabelExtractor(object):
             'scene': self.__is_scene(line)
         }
         if sum(test_results.values()) > 1:
-            raise RuntimeError('Multiple labels found. Line: {0};\nLabels: {1}'.format(line, ', '.join([k for k, v in test_results.items() if v])))
+            warnings.warn('Multiple labels found for line: {0};\nLabels found: {1}'.format(line, ', '.join([k for k, v in test_results.items() if v])))
+            return None
         # returns label string.
         for k, v in test_results.items():
             if v:
