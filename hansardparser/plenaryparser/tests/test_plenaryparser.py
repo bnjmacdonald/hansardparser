@@ -2,6 +2,9 @@
 
 Todos:
 
+    TODO: restructure tests to follow same testing structure as `classify`
+        teests.
+
     TODO: revise metadata test cases by: (a) dropping parliament; (b) revising
         date to datetime.
 """
@@ -15,43 +18,10 @@ import calendar
 import pandas as pd
 from bs4 import BeautifulSoup
 
-import settings
-from plenaryparser import utils
-from plenaryparser.XmlParser import XmlParser
-from plenaryparser.models.Entry import Entry
-
-
-# # DEBUGGING:
-# fname = 'Hansard 12.04.11.pdf'
-# input_dir = os.path.join(settings.BASE_DIR, 'hansardparser', 'test_input')
-# file_path = os.path.join(input_dir, fname)
-# verbose = 3
-# parser = XmlParser(verbose=verbose)
-# path = os.path.join(settings.BASE_DIR, 'query/output/temp')
-# metadata, contents = parser.process_transcript(
-#     file_path=file_path,
-#     save_soup=True,
-#     path=path,
-#     rm_whitespace=True,
-#     append_meta=True,
-#     to_format='df-long',
-#     speeches_only=False
-# )
-
-# from hansardparser.Sitting import Sitting
-# from bs4 import BeautifulSoup, Tag, NavigableString
-# self = parser
-# metadata = Sitting()
-# max_check = 50
-# self.soup = self._convert_pdf(file_path, False)
-# self._preprocess_soup()
-# metadata = self._process_meta()
-# for i, line in enumerate(contents):
-#     print('-------------')
-#     print(line)
-#     if i == 100:
-#         break
-
+from hansardparser import settings
+from hansardparser.plenaryparser import utils
+from hansardparser.plenaryparser.XmlParser import XmlParser
+from hansardparser.plenaryparser.models.Entry import Entry
 
 class UtilsTests(unittest.TestCase):
     def setUp(self):
@@ -183,7 +153,7 @@ class UtilsTests(unittest.TestCase):
             self.assertFalse(utils.is_page_footer(text))
 
     def test_parse_speaker_name(self):
-        raise NotImplementedError
+        self.fail('TODO: implement this test')
 
     # def test_clean_speaker_name(self):
     #     for text, truth in self.parenth_names:
@@ -197,7 +167,7 @@ class ParseHansardTests(unittest.TestCase):
     def setUpClass(cls):
         # cls.base_dir = '/Volumes/Transcend/HANSARDS'
         # self.base_dir = '/Users/mounted'
-        cls.base_dir = os.path.join(settings.PROJECT_DIR, 'tests', 'test_input')
+        cls.base_dir = os.path.join(settings.DATA_ROOT, 'tests', 'hansards')
         cls.filenames = [
             '31st march 1998P.pdf',
             '5th November 1998P.pdf',
