@@ -4,7 +4,7 @@ from unicodedata import normalize
 import subprocess
 from bs4 import BeautifulSoup
 
-import settings
+from hansardparser import settings
 
 def convert(file_path, save_soup=False, path=None, verbose=0):
     """converts pdf to xml. Wrapper to pdftohtml library. 

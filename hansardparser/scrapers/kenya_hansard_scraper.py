@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup
 import requests
 from requests.adapters import HTTPAdapter
 
-import settings
+from hansardparser import settings
 
 def parse_args():
     parser = argparse.ArgumentParser()
