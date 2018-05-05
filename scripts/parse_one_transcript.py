@@ -27,9 +27,9 @@ import random
 import subprocess
 import argparse
 
-import settings
 from hansardparser.plenaryparser.XmlParser import XmlParser
 from hansardparser.plenaryparser.utils import get_file_paths
+from hansardparser import settings
 
 def parse_args():
     parser = argparse.ArgumentParser()
