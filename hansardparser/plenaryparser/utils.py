@@ -1,6 +1,7 @@
+
 import os
 import numpy as np
-import pandas as pd
+from typing import Tuple, Optional
 import collections
 import datetime
 import pytz
@@ -182,7 +183,13 @@ def extract_parenth_name(text, name_at_begin=True):
     """Extracts a name in parentheses from the beginning of a speech.
 
     Returns:
+        
         the name and the following text.
+    
+    Example::
+
+        >>> extract_parenth_name('Hon. Mwakileo (The Minister for Agriculture)', False)
+        ('The Minister for Agriculture', 'Hon. Mwakileo')
     """
     if name_at_begin:
         parenth_reg = re.compile(r'^\s*(?P<in_parenth>\(.+\))\s*:\s*(?P<out_parenth>.*)', re.DOTALL)
@@ -222,7 +229,9 @@ def parse_speaker_name(name):
     name = rm_punct(name)
     appt = rm_punct(appt)
     # removes titles.
-    reg_title = re.compile(r'^\s*(?P<title>mr |bw |ms |bi |hon |capt |mrs |dr |prof |gen |maj-gen |maj |major |an hon|a hon|eng |engineer |col |rtd |rev |sen |mheshimiwa)(?P<name>.+)', re.IGNORECASE | re.DOTALL)
+    reg_title = re.compile(r'^\s*(?P<title>mr |bw |ms |bi |hon |capt |mrs |dr '
+        r'|prof |gen |maj-gen |maj |major |an hon|a hon|eng |engineer |col |rtd '
+        r'|rev |sen |mheshimiwa)(?P<name>.+)', re.IGNORECASE | re.DOTALL)
     matches = reg_title.search(name)
     if matches is not None:
         name = matches.group('name').strip()
@@ -247,6 +256,102 @@ def parse_speaker_name(name):
     # entry.title = title
     # entry.appointment = appt
     return name, title, appt
+
+
+def parse_speaker_nameV2(s: str) -> Tuple[str, str, str]:
+    """Parses speaker title, name, and appointment.
+    
+    NOTE: Very similar to `parse_speaker_name`.
+
+    Todos:
+
+        TODO: This implementation fails to extract speaker name when it spills
+            over a single line. Example::
+
+            `<newspeech>The Assistant Minister for Finance and Planning\n
+            (Mr. Odupoy): Bw. Spika, -naomba kujibu...`
+
+            This could be fixed by merging lines prior to extracting speakers.
+            But then we run into the problem of how to know when to merge
+            two speeches if you haven't extracted speakers yet. One way around this
+            would be to compile a list of all appointments, and then check if a
+            line matches an appointment.
+
+        TODO: combine with `parse_speaker_name` (will require some refactoring of
+            `XmlParser` class).
+    """
+    if s is None:
+        return None, None, None
+    title_regex = (r'(?P<title>mr|bw|ms|bi|hon|capt|mrs|dr|prof|gen|maj-gen|maj'
+        r'|major|an hon|a hon|eng|engineer|col|rtd|rev|sen|mheshimiwa)')
+    # title followed by space and name, then colon.
+    # e.g. "Mr. Bett: Thank, you, Mr. Speaker."
+    name_regex1 = re.compile(rf'^({title_regex}[\. ]{{1,2}})?'
+        r'(?P<name>[\dA-z-\', ]{3,100})$', re.IGNORECASE|re.DOTALL)
+    # for cases in which appointment is first, followed by name in parentheses.
+    # e.g. "The Minister for Agriculture (Hon. Bett): Thank you, Mr. speaker."
+    name_regex2 = re.compile(rf'^(?P<appt>[\dA-z-\',\. ]{{5,}})\(\s{{0,2}}{title_regex}[\. ]{{1,2}}'
+        r'(?P<name>[\dA-z-\', ]{3,100})\)\s{0,2}$', re.IGNORECASE|re.DOTALL)
+    # name is first, followed by appointment in parentheses.
+    # e.g. "Hon. Bett (The Minister for Agriculture): Thank you, Mr. speaker."
+    name_regex3 = re.compile(rf'^{title_regex}[\. ]{{1,2}}'
+        r'(?P<name>[\dA-z-\', ]{3,100})\((?P<appt>[\dA-z-\',\. ]{5,})\)\s{0,2}$', re.IGNORECASE|re.DOTALL)
+    # appointment only.
+    name_regex4 = re.compile(rf'^(?P<appt>[\dA-z-\',\. ]{{5,}})\s{{0,2}}$', re.IGNORECASE|re.DOTALL)
+    name, title, appt = None, None, None
+    result = None
+    for regex in [name_regex1, name_regex2, name_regex3, name_regex4]:
+        result = regex.search(s)
+        # print(result)
+        if result is not None:
+            name = result.group('name') if 'name' in result.groupdict() else None
+            title = result.group('title') if 'title' in result.groupdict() else None
+            appt = result.group('appt') if 'appt' in result.groupdict() else None                
+            break
+    if name is not None:
+        if re.search(r'speaker|minister|members', name, re.IGNORECASE):
+            if appt is not None:
+                appt += f' ({name})'  # KLUDGE: when does this actually happen?
+            else:
+                appt = name
+            name = None
+    name = clean_speaker_name(name)
+    return title, name, appt
+
+
+def extract_speaker_name(s: str) -> Tuple[str, str]:
+    """Extracts speaker name from text.
+
+    Todos:
+
+        TODO: this method still runs into problems when a line starts with a few
+            words followed by a colon. Example:: `Wizara: hiyo.`
+                
+    """
+    if s is None:
+        return None, None
+    title_regex = (r'(?P<title>mr|bw|ms|bi|hon|capt|mrs|dr|prof|gen|maj-gen|maj'
+        r'|major|an hon|a hon|eng|engineer|col|rtd|rev|sen|mheshimiwa)')
+    regex1 = re.compile(rf'^(?P<name>[\dA-z-\'\(\)\., ]{{3,100}})(?P<segue>:)(?P<text>.+)$', re.IGNORECASE|re.DOTALL)
+    # regex2: allows for more segue possibilities, but restricts pre-segue to start
+    # with a speaker title.
+    regex2 = re.compile(rf'^(?P<name>{title_regex}[\. ]{{1,2}}[A-z-\'\(\)\., ]{{3,40}})'
+        r'(?P<segue>:| said| asked| ali)(?P<text>.+)$', re.IGNORECASE|re.DOTALL)
+    name = None
+    text = s
+    for i, regex in enumerate([regex1, regex2]):
+        result = regex.search(s)
+        # print(result)
+        if result is not None:
+            name = result.group('name')
+            # KLUDGE: strings such as "Mr. Speaker, I said that..." should not have a speaker extracted.
+            if i == 1 and ':' not in result.group('segue') and re.search(r'speaker', name, re.IGNORECASE):
+                name = None
+            if ':' in result.group('segue'):
+                text = result.group('text')
+            break
+    return name, text
+
 
 def fix_header_words(text):
     if text is None:
@@ -298,3 +403,21 @@ def rm_punct(s):
     if s is None:
         return None
     return re.sub(r'[{0}]'.format(re.escape(string.punctuation)), '', s)
+
+
+def extract_outer_tag(s: str) -> Tuple[str, str, str]:
+    """extracts open and close html/xml tags from a string.
+    """
+    open_tag = None
+    close_tag = None
+    # extracts opening tag.
+    open_regex = re.search(r'^<(?P<opentag>.{1,20})>', s)
+    if open_regex is not None:
+        open_tag = open_regex.group('opentag')
+        s = s[:open_regex.start()] + s[open_regex.end():]
+    # extracts closing tag.
+    close_regex = re.search(r'</(?P<closetag>[A-z]{1,20})>$', s)
+    if close_regex is not None:
+        close_tag = close_regex.group('closetag')
+        s = s[:close_regex.start()] + s[close_regex.end():]
+    return s, open_tag, close_tag

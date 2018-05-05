@@ -7,7 +7,6 @@ Each Entry object represents a single entry from a transcript, which can either 
 # from abc import ABCMeta, abstractmethod
 import re
 import numpy as np
-from hansardparser.plenaryparser.utils import clean_speaker_name
 
 class Entry(object):
     """An entry in a Hansard transcript.
@@ -26,7 +25,14 @@ class Entry(object):
 
     # __metaclass__ = ABCMeta
 
-    def __init__(self, entry_type=None, text=None, speaker=None, speaker_cleaned=None, page_number=None, title=None, appointment=None):
+    def __init__(self,
+                 entry_type=None,
+                 text=None,
+                 speaker=None,
+                 speaker_cleaned=None,
+                 page_number=None,
+                 title=None,
+                 appointment=None):
         # NOTE TO SELF: attributes to add:
         #   speaker ID
         self.entry_type = entry_type
@@ -48,14 +54,8 @@ class Entry(object):
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
-
-    def entry_type(self):
-        """Returns a string representing whether entry is a header, sub-header, speech, or scene."""
-        return self.entry_type
-
-
     def can_merge(self, next_entry):
-        """ Returns True if two entries can be merged together.
+        """Returns True if two entries can be merged together.
 
         next_entry must come after self.
 
@@ -64,13 +64,22 @@ class Entry(object):
         NOTE TO SELF: will need to deal with problems where same speaker is spelled somewhat differently.
 
         NOTE TO SELF: add flexibility to this function for fuzzy matching.
+
+        Todos:
+
+            TODO: deal with problem where speech separated by a scene should still
+                have the speaker carry forward.
         """
         if next_entry.entry_type == 'punct':
             return True
-
-        if self.entry_type == next_entry.entry_type or (self.entry_type and next_entry.entry_type and self.entry_type.startswith('speech_') and next_entry.entry_type.startswith('speech_')):
-            if self.entry_type in ['speech_new', 'speech_ctd']:
+        if self.entry_type == next_entry.entry_type or \
+            (self.entry_type and next_entry.entry_type and \
+             self.entry_type.startswith('speech_') and \
+             next_entry.entry_type.startswith('speech_')):
+            if self.entry_type in ['speech', 'speech_new', 'speech_ctd']:
                 if self.speaker == next_entry.speaker:
+                    return True
+                if next_entry.speaker is None:
                     return True
                 # for attr in ['speaker', 'speaker_cleaned', 'appointment']:
                 #     if self.__getattribute__(attr) is not None:
@@ -95,8 +104,6 @@ class Entry(object):
             elif self.entry_type == 'subheader':
                 if not (re.search(r"bill$|b ill$", self.text.strip(), re.IGNORECASE) and re.search(r'^t', next_entry.text, re.IGNORECASE)):
                     return True
-                # else:
-                #     print(self.text, next_entry.text)
             else:
                 return True
         return False
@@ -107,60 +114,36 @@ class Entry(object):
 
         The second argument is an entry that comes AFTER the first entry.
         """
-
         # NOTE TO SELF: anything else to merge besides text?
         # if self.text is None:
         #     self.text = ''
         # if next_entry.text is None:
         #     next_entry.text = ''
-
         if not self.can_merge(next_entry):
             raise RuntimeError('Entries cannot be merged, perhaps because they do not have the same entry_type or same speaker.')
-
         # if self.entry_type == 'subheader' and len(self.text.strip()) == 1:
         #     self.text = self.text + next_entry.text
         self.text = self.text + ' ' + next_entry.text
-
-        # NOTE TO SELF: need to make this fuzzy matching more rigorous. Also need to better coordinate it with can_merge. Issue is that sometimes speaker from first entry is preferred, whereas other times speaker from next_entry is preferred.
-
+        # NOTE TO SELF: need to make this fuzzy matching more rigorous. Also need
+        # to better coordinate it with can_merge. Issue is that sometimes speaker
+        # from first entry is preferred, whereas other times speaker from
+        # next_entry is preferred.
         if next_entry.speaker is None:
             next_entry.speaker = self.speaker
+            next_entry.speaker_cleaned = self.speaker_cleaned
+            next_entry.appointment = self.appointment
+            next_entry.title = self.title
         if self.speaker != next_entry.speaker:
-            if len(self.speaker) > len(next_entry.speaker):
-                pass
-            elif len(self.speaker) < len(next_entry.speaker):
-                self.speaker = next_entry.speaker
-            elif len(self.speaker) < len(next_entry.speaker):
-                raise RuntimeError('Entries have same speaker length but are not equal.')
-        # TODO: fix this kludge.
-        self.speaker = clean_speaker_name(self.speaker)
-        next_entry.speaker = clean_speaker_name(next_entry.speaker)
-        return 0
+            raise RuntimeError(f'Speakers are not equal: {self.speaker} != {next_entry.speaker}.')
+            # speaker_len = len(self.speaker) if self.speaker else 0
+            # next_speaker_len = len(next_entry.speaker) if next_entry.speaker else 0
+            # if speaker_len > next_speaker_len:
+            #     pass
+            # elif speaker_len < next_speaker_len:
+            #     self.speaker = next_entry.speaker
+            # elif speaker_len == next_speaker_len:
+            #     raise RuntimeError('Entries have same speaker length but are not equal.')
+        return None
 
     # def to_list(self):
     #     """ Returns entry values as a list. """
-
-
-# class Header(Entry):
-#     """ A header object in a Hansard transcript. """
-
-#     def entry_type(self):
-#         return 'header'
-
-# class Subheader(Entry):
-#     """ A subheader object in a Hansard transcript. """
-
-#     def entry_type(self):
-#         return 'subheader'
-
-# class Speech(Entry):
-#     """ A speech object in a Hansard transcript. """
-
-#     def entry_type(self):
-#         return 'speech'
-
-# class Scene(Entry):
-#     """ A scene object in a Hansard transcript. """
-
-#     def entry_type(self):
-#         return 'scene'

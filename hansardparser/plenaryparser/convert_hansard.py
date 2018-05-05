@@ -3,6 +3,7 @@
 """
 
 import os
+import warnings
 import pandas as pd
 
 from hansardparser.plenaryparser import utils
@@ -99,9 +100,11 @@ def contents_to_2darray(contents, attributes, verbose):
         elif entry.entry_type == 'scene':
             current_scene = [getattr(entry, attr) for attr in attributes]
             data.append([current_header, current_subheader, current_subsubheader] + current_scene)
-        elif entry.entry_type in ['speech_new', 'speech_ctd']:
+        elif entry.entry_type in ['speech', 'speech_new', 'speech_ctd']:
             current_speech = [getattr(entry, attr) for attr in attributes]
             data.append([current_header, current_subheader, current_subsubheader] + current_speech)
+        else:
+            warnings.warn(f'Entry type {entry.entry_type} not recognized. Entry: {entry.__dict__}', RuntimeWarning)
     # if verbose and len(transcript_dict['preliminary']['no_subheading']['no_subsubheading']) > 5:
     #     warnings.warn('More than 5 entries encountered before first header', RuntimeWarning)
     return data
