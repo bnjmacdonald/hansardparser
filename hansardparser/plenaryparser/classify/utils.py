@@ -1,7 +1,8 @@
 
 import re
 import argparse
-from typing import List
+from typing import List, Iterable, Generator, Any
+
 
 def parse_unknown_args(args: List[str]) -> argparse.Namespace:
     """parses unknown args returned from second element of parser.parse_known_args().
@@ -55,3 +56,37 @@ def is_arg(s):
     """given a string (s), returns True if s is a command-line argument (i.e.
     prefixed with '--' or '-'). False otherwise."""
     return bool(re.search(r'^-{1,2}', s))
+
+
+def batchify(iterable: Iterable[Any], batch_size: int = 1000) -> Generator[Iterable[Any], None, None]:
+    """yields batches of an iterable in batches of size n.
+
+    Divides an iterable into batches of size n, yielding one batch at a time.
+
+    Arguments:
+
+        iterable: Iterable[Any]. Iterable (list, np.array, ...) to be split into
+            batches. Must be an iterable that can be sliced (e.g. `iterable[0:5]`)
+            and must have a length.
+
+        batch_size: int = 1000. Size of each batch.
+
+    Yields:
+
+        Iterable[Any]. Batch from iterable.
+
+    Example::
+
+        >>> data = list(range(0,11))
+        >>> for batch in batchify(data, 3):
+        >>>     print(batch)
+        [0, 1, 2]
+        [3, 4, 5]
+        [6, 7, 8]
+        [9, 10]
+    """
+    assert isinstance(batch_size, int), f'batch_size must be int, but received {type(batch_size)}'
+    assert batch_size > 0, f'batch_size must be greater than 0, but received {batch_size}'
+    l = len(iterable)
+    for i in range(0, l, batch_size):
+        yield iterable[i:min(i + batch_size, l)]
