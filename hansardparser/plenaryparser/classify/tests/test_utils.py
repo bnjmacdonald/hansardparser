@@ -12,6 +12,7 @@ class ParseUnknownArgsTests(unittest.TestCase):
         self.assertEqual(result.foo, 'a')
         self.assertEqual(result.f, 'a')
 
+
     def test_parse_type(self):
         """Tests that digits get parsed as the appropriate type."""
         args = [
@@ -29,6 +30,7 @@ class ParseUnknownArgsTests(unittest.TestCase):
             result = utils.parse_unknown_args(arg[0])
             self.assertTrue(isinstance(result.foo, arg[1]))
 
+
     def test_list_arg(self):
         """tests that an argument followed by a string with whitespace or an
         array of non-args is parsed as a list."""
@@ -43,6 +45,7 @@ class ParseUnknownArgsTests(unittest.TestCase):
             self.assertEqual(len(result._get_kwargs()), 1)
             self.assertTrue(result.foo == arg[1]['foo'])
 
+
     def test_mixed_args(self):
         """tests that a mixed list of arguments gets parsed appropriately.
         """
@@ -54,6 +57,7 @@ class ParseUnknownArgsTests(unittest.TestCase):
             result = utils.parse_unknown_args(arg['input'])
             for k, v in arg['expected'].items():
                 self.assertEqual(result.__getattribute__(k), v)
+
 
     def test_unique_args(self):
         """tests that each argument can only appear once.
@@ -80,6 +84,7 @@ class ParseUnknownArgsTests(unittest.TestCase):
             result = utils.parse_unknown_args(args)
         except AssertionError:
             self.fail('utils.parse_unknown_args raised AssertionError unexpectedly.')
+
 
 if __name__ == '__main__':
     unittest.main()
