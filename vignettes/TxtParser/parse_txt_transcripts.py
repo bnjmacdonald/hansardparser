@@ -18,27 +18,39 @@ import json
 import requests
 import numpy as np
 import subprocess
+import warnings
 
 from hansardparser.plenaryparser.TxtParser import TxtParser
 from hansardparser import settings
 
 
-INPATH = '/Users/bnjmacdonald/Documents/current/projects/hansardparser/data/tests/hansards/txt/1985/11th June 1985 - 3rd oct 1985.txt'
+INPATH = '/Users/bnjmacdonald/Documents/current/projects/hansardparser/data/tests/hansards/txt/1985/8th Oct 1985 - 11th dec 1985.txt'
 OUTPATH = os.path.join(settings.DATA_ROOT, 'temp', 'plenaryparser', 'txt')
 VERBOSITY = 1
 MERGE = True
 TO_FORMAT = 'df-long'
 FOLDERS = ['1985', '1987', '1990', '1992']
 
+FILES_META_PATH = os.path.join(settings.DATA_ROOT, 'manual', 'txt-files-meta.json')
+with open(FILES_META_PATH, 'r') as f:
+    FILES_META = json.load(f)
+
 
 def main():
+    # reads in text file.
     with open(INPATH, 'r') as f:
         text = f.readlines()
+    # reads in file metadata.
     with open(INPATH.replace('.txt', '_meta.json'), 'r') as f:
         meta = json.load(f)
-    if 'start_line' in meta:
-        text = '\n'.join(text[meta['start_line']:meta['end_line']+1])
-    else:
+    year_str = meta['folder']['name']
+    filename = meta['name']
+    try:
+        start_line = FILES_META[year_str][filename]['start_line']
+        end_line = FILES_META[year_str][filename]['end_line']
+        text = '\n'.join(text[start_line:end_line+1])
+    except:
+        warnings.warn(f'Start/end lines not found for "{year_str}/{filename}".')
         text = '\n'.join(text)
     parser = TxtParser(verbose=VERBOSITY)
     # self = parser
