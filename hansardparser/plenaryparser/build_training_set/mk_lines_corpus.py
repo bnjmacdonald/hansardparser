@@ -11,13 +11,13 @@ Usage:
     Convert xml lines to padded sequence format (e.g. for deep learning models)::
 
         python -m hansardparser.plenaryparser.build_training_set.mk_lines_corpus \
-            -v 2 \
-            --fmt seq \
+            -v 2 --xml --fmt seq \
             --input /Users/bnjmacdonald/Documents/current/projects/hansardlytics/data/raw/hansards/2013-
 
     Convert xml lines to bag-of-words format (e.g. for sklearn models)::
 
-        python -m hansardparser.plenaryparser.build_training_set.mk_lines_corpus -v 2 --fmt bow --input tests/test_input
+        python -m hansardparser.plenaryparser.build_training_set.mk_lines_corpus \
+            -v 2 --xml --fmt bow --input tests/test_input
 """
 
 import os
@@ -25,15 +25,17 @@ import re
 import json
 import argparse
 import datetime
-from typing import List, Tuple
+import warnings
+from typing import List, Tuple, Callable
 import numpy as np
+import pandas as pd
 # from nltk.stem.porter import PorterStemmer
 from text2vec.corpora.corpora import Corpus, CorpusBuilder
 from text2vec.processing.preprocess import preprocess_one  # rm_stop_words_punct, rm_digits
 from text2vec.corpora.dictionaries import BasicDictionary
 
 from hansardparser.plenaryparser.build_training_set.extract_line_labels import LineLabelExtractor
-from hansardparser.plenaryparser.build_training_set.utils import insert_xml_tag_whitespace
+from hansardparser.plenaryparser.build_training_set.utils import insert_xml_tag_whitespace, str2ascii_safe
 from hansardparser.plenaryparser.classify import split
 from hansardparser import settings
 
@@ -42,9 +44,19 @@ SPLIT_SIZES = {'train_size': 0.6, 'dev_size': 0.2, 'test_size': 0.2}
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbosity', type=int, default=0)
-    parser.add_argument('-i', '--input', type=str, help="path to input directory containing Hansard PDFs.")
+    parser.add_argument('-i', '--input', type=str, help="path to input directory containing Hansard PDFs or hand-labeled lines.")
+    parser.add_argument('-c', '--corpus', type=str, help="directory to save corpus in.",
+        default=os.path.join(settings.DATA_ROOT, 'generated', 'plenaryparser', 'text2vec', 'corpora'))
+    parser.add_argument('-b', '--builder', type=str, help="directory to save builder in.",
+        default=os.path.join(settings.DATA_ROOT, 'generated', 'plenaryparser', 'text2vec', 'builders'))
+    parser.add_argument('-x', '--xml', action='store_true', default=False, help="Lines are XML data.")
+    parser.add_argument('--semisupervised', action='store_true', default=False,
+        help="Construct corpus from semi-supervised training set "
+             "(i.e. use regex parser to extract line labels).")
     parser.add_argument('-f', '--fmt', type=str, help="model type", choices=['bow', 'seq'], required=True)
     parser.add_argument('--max_seqlen', type=int, help="max sequence length")
+    parser.add_argument('--rm_flatworld_tags', action='store_true', default=False,
+        help='Remove Flatworld tags.')
     args = parser.parse_args()
     return args
 
@@ -53,18 +65,42 @@ def main() -> None:
     args = parse_args()
     # creates directories to save corpus and corpus builder.
     datestr = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H%M%S')
-    corpus_path = os.path.join(settings.DATA_ROOT, 'generated', 'text2vec', 'corpora', datestr)
-    builder_path = os.path.join(settings.DATA_ROOT, 'generated', 'text2vec', 'builders', datestr)
+    corpus_path = os.path.join(args.corpus, datestr)
+    builder_path = os.path.join(args.builder, datestr)
     if not os.path.exists(builder_path):
         os.makedirs(builder_path)
     if not os.path.exists(corpus_path):
         os.makedirs(corpus_path)
-    lines, labels = _extract_all_lines(args.input)
-    labels, label_codes = _assign_label_codes(labels)
+    if args.semisupervised:
+        if args.xml:
+            lines, labels = _extract_all_lines(args.input)
+            labels, label_codes = _assign_label_codes(labels)
+            text_transformer = __xml_text_transformer
+        else:
+            raise NotImplementedError('TODO: implement semi-supervised extraction for TxtParser.')
+    else:
+        if args.xml:
+            raise NotImplementedError('TODO: implement mk_lines_corpus for hand-labeled xml lines.')
+        else:
+            # TODO: skip lines with a note.
+            lines = pd.read_csv(args.input)
+            # keeps only lines where label exists and is not equal to 'blank' or 'garbage'
+            lines = lines[(lines.label.notnull()) & (~lines.label.isin(['blank', 'garbage']))]
+            assert lines.text.isnull().sum() == 0, "Every line should have a non-null text value."
+            labels, label_codes = _assign_label_codes(lines.label.tolist())
+            lines = [{'text': l['text'], '_id': f"{l['_id']}-{l['line']}"} for ix, l in lines.iterrows()]
+            # removes Flatworld tags from lines.
+            if args.rm_flatworld_tags:
+                for line in lines:
+                    inner_regex = r'[/ ]{0,2}(header|newspeech|speech|sub-?header|scene|district)[/ ]{0,2}'
+                    line['text'] = re.sub(rf'(<{inner_regex}>)|(<{inner_regex})|({inner_regex}>)', '', line['text'], flags=re.IGNORECASE)
+                    if args.verbosity > 1 and re.search(r'(<[/ \w]{3,})|([/ \w]{3,}>)', line['text']):
+                        warnings.warn(f'angle bracket exists in line: {line["text"]}')
+            text_transformer = __text_to_char_transformer
     # saves label codes to disk.
     with open(os.path.join(corpus_path, 'label_codes.json'), 'w') as f:
         json.dump(label_codes, f)
-    _split_and_build_corpus(lines, labels, corpus_path, builder_path, args)
+    _split_and_build_corpus(lines, labels, corpus_path, builder_path, text_transformer, args)
     return None
 
 
@@ -127,7 +163,12 @@ def _assign_label_codes(labels: list) -> Tuple[List[int], dict]:
     return labels_coded, label_codes
 
 
-def _split_and_build_corpus(lines: List[dict], labels: list, corpus_path: str, builder_path: str, args: argparse.Namespace) -> None:
+def _split_and_build_corpus(lines: List[dict],
+                            labels: list,
+                            corpus_path: str,
+                            builder_path: str,
+                            text_transformer: Callable[[str], List[str]],
+                            args: argparse.Namespace) -> None:
     """splits lines into train, dev, and test sets, then builds a corpus for each
     set and saves corpus to disk.
 
@@ -142,11 +183,21 @@ def _split_and_build_corpus(lines: List[dict], labels: list, corpus_path: str, b
 
         builder_path: str. Directory to save corpus builder.
 
+        text_transformer: Callable[[str], List[str]]. Text transformer. A callable
+            method that takes a string as the only argument and returns a list of
+            string.
+
         args: argparse.Namespace.
 
     Returns:
 
         None.
+
+    Todos:
+
+        TODO: remove reliance on `args` argument. This is kludgy.
+
+        TODO: allow for stratified splits (e.g. by date, by document).
     """
     assert len(lines) == len(labels), 'lines and labels must have same length.'
     # corpus builder options
@@ -159,15 +210,29 @@ def _split_and_build_corpus(lines: List[dict], labels: list, corpus_path: str, b
     assert len(_ids) == len(set(_ids)), 'one or more line _ids are not unique.'
     splits = split.train_dev_test_split(_ids, sizes=SPLIT_SIZES)
     # split.save_splits(splits, os.path.join(corpus_path, 'splits'), fmt="%s")
-    for split_name, split_ids in splits.items():
+    builder_exists = os.path.isfile(os.path.join(builder_path, 'dictionary.json'))
+    if builder_exists:
+        builder = CorpusBuilder(builder_path, verbosity=args.verbosity)
+    else:
+        if not os.path.exists(builder_path):
+            os.makedirs(builder_path)
+        # initializes corpus builder.
+        builder = CorpusBuilder(
+            path=builder_path,
+            fmt=args.fmt,
+            dictionary=BasicDictionary(),
+            text_transformer=text_transformer,
+            options=options,
+            verbosity=args.verbosity
+        )
+    for split_name in ['train', 'dev', 'test']:
+        split_ids = splits[split_name]
         if args.verbosity > 0:
-            print('building corpus for {0} set.'.format(split_name))
+            print(f'building corpus for {split_name} set.')
         if not os.path.isdir(os.path.join(corpus_path, split_name)):
             os.mkdir(os.path.join(corpus_path, split_name))
-        if not os.path.isdir(os.path.join(builder_path, split_name)):
-            os.mkdir(os.path.join(builder_path, split_name))
         # saves _ids
-        np.savetxt(os.path.join(corpus_path, split_name, 'labels.txt'), split_ids, fmt='%s')
+        # np.savetxt(os.path.join(corpus_path, split_name, '_ids.txt'), split_ids, fmt='%s')
         # subsets lines and labels to only those examples in this data split.
         split_ids_set = set(split_ids)
         split_lines = []
@@ -178,28 +243,31 @@ def _split_and_build_corpus(lines: List[dict], labels: list, corpus_path: str, b
                 split_labels.append(labels[i])
         # saves labels.
         np.savetxt(os.path.join(corpus_path, split_name, 'labels.txt'), split_labels, fmt='%s')
-        # initializes corpus builder.
-        builder = CorpusBuilder(
-            path=os.path.join(builder_path, split_name),
-            fmt=args.fmt,
-            dictionary=BasicDictionary(),
-            text_transformer=__text_transformer,
-            options=options,
-            verbosity=args.verbosity
-        )
         # builds corpus for this data split
         corpus = Corpus(os.path.join(corpus_path, split_name), builder=builder, verbosity=args.verbosity)
-        corpus.build(split_lines, update_dict=True)
+        # only update  builder dictionary if this is a training set and builder has not already been created.
+        update_dict = True if split_name == 'train' else False
+        corpus.build(split_lines, update_dict=update_dict)
         # saves builder config.
         # NOTE: builder must be saved because dictionary and text_transformer will
         # be needed later.
         builder.save()
     if args.verbosity:
-        print('\nCorpus saved to {0}\nDictionary saved to {1}\nSuccess!'.format(corpus_path, builder_path))
+        print(f'\nCorpus saved to {corpus_path}\nDictionary saved to {builder_path}\nSuccess!')
     return 0
 
 
-def __text_transformer(text: str) -> List[str]:
+def __text_to_char_transformer(text: str) -> List[str]:
+    """custom text transformer. Receives a string as the only argument and
+    returns a list of characters.
+    """
+    pipeline = [
+        {"returns": "str", "function": str2ascii_safe}
+    ]
+    return preprocess_one(text, pipeline=pipeline, tokenize=lambda x: list(x))
+
+
+def __xml_text_transformer(text: str) -> List[str]:
     """custom text transformer. Receives a string as the only argument and
     returns a list of tokens."""
     pipeline = [
