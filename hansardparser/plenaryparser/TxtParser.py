@@ -494,9 +494,12 @@ class TxtParser(HansardParser):
         so, False otherwise."""
         tag_is_subsubheader = (open_tag and 'subsubheader' in open_tag) or (close_tag and 'subsubheader' in close_tag)
         is_subsubheader = bool(
-            tag_is_subsubheader or
-            bool(re.search(r'^clause|^question no|^no[\.,] \d{1,4}$|^\(the house resumed\)|^(first|'
+            tag_is_subsubheader or (
+                len(line) < 200 and
+                bool(re.search(r'^clause|^question no|^no[\.,] \d{1,4}$|^\(the house resumed\)|^(first|'
                       r'second|third|fourth|fifth|sixth) schedule$', line, re.IGNORECASE))
+                
+            )
         )
         return is_subsubheader
 
