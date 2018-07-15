@@ -181,8 +181,14 @@ def predict(inputs: np.array,
             pred_logits.append(batch_pred_logits)
             pred_probs.append(batch_pred_probs)
             pred_classes.append(batch_pred_classes)
-        pred_logits = np.hstack(pred_logits)
-        pred_probs = np.hstack(pred_probs)
+        if pred_logits[0].ndim > 1:
+            pred_logits = np.vstack(pred_logits)
+        else:
+            pred_logits = np.hstack(pred_logits)
+        if pred_probs[0].ndim > 1:
+            pred_probs = np.vstack(pred_probs)
+        else:
+            pred_probs = np.hstack(pred_probs)
         pred_classes = np.hstack(pred_classes)
     assert pred_logits.shape[0] == inputs.shape[0]
     assert pred_probs.shape[0] == inputs.shape[0]
