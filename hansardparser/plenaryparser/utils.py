@@ -405,19 +405,45 @@ def rm_punct(s):
     return re.sub(r'[{0}]'.format(re.escape(string.punctuation)), '', s)
 
 
-def extract_outer_tag(s: str) -> Tuple[str, str, str]:
-    """extracts open and close html/xml tags from a string.
+def extract_flatworld_tags(s: str) -> Tuple[str, List[str]]:
+    """extracts open and close html/xml Flatworld tags from a string.
+
+    note: the reason we do not use BeautifulSoup for this is that the Flatworld
+    tags often have syntax errors (e.g. "header>") that would not be read properly
+    by BeautifulSoup. So, instead, we use custom regular expressions to extract
+    the tags.
+
+    Flatworld tags include `["<header>", "<newspeech>", "<scene>"]` and minor
+    variants (e.g. "<speech>").
+
+    Returns:
+
+        Tuple[str, List[str]]. First element of the tuple is the string with the
+            Flatworld tags removed. Second element of the tuple is a list of the
+            unique Flatworld strings that were found and removed. If no tags are
+            found, an empty list is returned. Tags are listed in alphabetical
+            order.
+
+    Example::
+
+        >>> extract_flatworld_tags("<header><b>MOTIONS</b></header>")
+        ('<b>MOTIONS</b>', ['header'])
     """
-    open_tag = None
-    close_tag = None
-    # extracts opening tag.
-    open_regex = re.search(r'^<(?P<opentag>.{1,20})>', s)
-    if open_regex is not None:
-        open_tag = open_regex.group('opentag')
-        s = s[:open_regex.start()] + s[open_regex.end():]
-    # extracts closing tag.
-    close_regex = re.search(r'</(?P<closetag>[A-z]{1,20})>$', s)
-    if close_regex is not None:
-        close_tag = close_regex.group('closetag')
-        s = s[:close_regex.start()] + s[close_regex.end():]
-    return s, open_tag, close_tag
+    # extracts the unique Flatworld tags found.
+    inner_regex = r'[/\s]{0,3}(new[\-\s]?speech|speech|sub[\-\s]?header|header|scene|district)[/\s]{0,3}'
+    regex = re.compile(rf'<({inner_regex})>|<({inner_regex})|({inner_regex})>', flags=re.IGNORECASE)
+    result = re.findall(regex, s)
+    tags = set({})
+    if len(result):
+        for taglist in result:
+            for tag in taglist:
+                if tag is not None:
+                    tag = re.sub(r'[</>\-\s]', '', tag).lower().strip()
+                    if len(tag):
+                        tags.add(tag)
+    tags = sorted(tags)
+    # removes the Flatworld tags from the string.
+    s = re.sub(regex, '', s)
+    # if verbosity > 1 and re.search(r'(<[/ \w]{3,})|([/ \w]{3,}>)', s):
+    #     warnings.warn(f'angle bracket exists in line: {s}')
+    return s, tags

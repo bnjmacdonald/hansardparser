@@ -493,24 +493,287 @@ class UtilsTests(unittest.TestCase):
         for text in self.false_footers:
             self.assertFalse(utils.is_page_footer(text))
 
-    def test_extract_outer_tag(self):
+
+class ExtractFlatworldTagsTests(unittest.TestCase):
+    """tests for `utils.extract_flatworld_tags`.
+    """
+
+    def test_extract_nothing(self):
+        """tests that `extract_flatworld_tags` extracts nothing when there is
+        no Flatworld tag to extract.
+        """
         strings = [
-            ('<header>ORAL ANSWERS TO QUESTIONS </header>', ('ORAL ANSWERS TO QUESTIONS ', 'header', 'header')),
-            # capitalized tag
-            ('<HEADER>ORAL ANSWERS TO QUESTIONS </HEADER>', ('ORAL ANSWERS TO QUESTIONS ', 'HEADER', 'HEADER')),
-            # close tag but no open tag.
-            ('<newspeech>Mr. Speaker: Anyone here from the Ministry of', ('Mr. Speaker: Anyone here from the Ministry of', 'newspeech', None)),
-            # open tag but no close tag.
-            ('Mr. Speaker: Anyone here from the Ministry of</newspeech>', ('Mr. Speaker: Anyone here from the Ministry of', None, 'newspeech')),
-            # nested tags.
-            ('<newspeech>Mr. Speaker: Anyone <b>here</b> from the Ministry of</newspeech>', ('Mr. Speaker: Anyone <b>here</b> from the Ministry of', 'newspeech', 'newspeech')),
-            ('Mr. Speaker: Anyone <b>here</b> from the Ministry of</newspeech>', ('Mr. Speaker: Anyone <b>here</b> from the Ministry of', None, 'newspeech')),
+            ('ORAL ANSWERS TO QUESTIONS ', ('ORAL ANSWERS TO QUESTIONS ', [])),
+            ('bills', ('bills', [])),
+            ('Header 3 states that', ('Header 3 states that', [])),
+            ('speech by Mr. Gikaria was ', ('speech by Mr. Gikaria was ', [])),
         ]
         for s, expected in strings:
-            s2, open_tag, close_tag = utils.extract_outer_tag(s)
+            s2, tags = utils.extract_flatworld_tags(s)
             self.assertEqual(s2, expected[0])
-            self.assertEqual(open_tag, expected[1])
-            self.assertEqual(close_tag, expected[2])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_header_tag(self):
+        """tests that `extract_flatworld_tags` extracts <header> tags.
+        """
+        strings = [
+            ('<header>ORAL ANSWERS TO QUESTIONS </header>', ('ORAL ANSWERS TO QUESTIONS ', ['header'])),
+            ('<header>bills</header>', ('bills', ['header'])),
+            ('<header>MOTIONS</header>', ('MOTIONS', ['header'])),
+            ('<subheader>Question no. 259</subheader>', ('Question no. 259', ['subheader'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_speech_tag(self):
+        """tests that `extract_flatworld_tags` extracts <speech> tags.
+        """
+        strings = [
+            ('<newspeech>Mr. Speaker: Anyone here from the Ministry of</newspeech>', ('Mr. Speaker: Anyone here from the Ministry of', ['newspeech'])),
+            ('<newspeech>Mr. Gikaria:</newspeech>', ('Mr. Gikaria:', ['newspeech'])),
+            ('<newspeech>MR. GIKARIA: </newspeech>', ('MR. GIKARIA: ', ['newspeech'])),
+            ('<speech>MR. GIKARIA: </speech>', ('MR. GIKARIA: ', ['speech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_scene_tag(self):
+        """tests that `extract_flatworld_tags` extracts <scene> tags.
+        """
+        strings = [
+            ('<scene>(Question proposed)</scene>', ('(Question proposed)', ['scene'])),
+            ('<scene>(applause) </scene>', ('(applause) ', ['scene'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_misspelled_tag(self):
+        """tests that `extract_flatworld_tags` is insensitive to common tag mis-spellings.
+        """
+        strings = [
+            ('<headr>bills</headr>', ('bills', ['headr'])),
+            ('<scen>(Question proposed)</scen>', ('(Question proposed)', ['scen'])),
+            ('<newspech>Mr. Gikaria:</newspech>', ('Mr. Gikaria:', ['newspech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_hyphen_tag(self):
+        """tests that `extract_flatworld_tags` is insensitive to common hyphens
+        (e.g. "new-speech").
+        """
+        strings = [
+            ('<sub-header>bills</sub-header>', ('bills', ['subheader'])),
+            ('<new-speech>Mr. Gikaria:</new-speech>', ('Mr. Gikaria:', ['newspeech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+    
+    def test_extract_tag_any_case(self):
+        """tests that `extract_flatworld_tags` is insensitive to the case of the tag.
+        """
+        strings = [
+            ('<NEWSPEECH>Mr. Speaker: Anyone here from the Ministry of</NEWSPEECH>', ('Mr. Speaker: Anyone here from the Ministry of', ['newspeech'])),
+            ('<NEWSPEECH>Mr. Speaker: Anyone here from the Ministry of</newspeech>', ('Mr. Speaker: Anyone here from the Ministry of', ['newspeech'])),
+            ('<Newspeech>Mr. Gikaria:</Newspeech>', ('Mr. Gikaria:', ['newspeech'])),
+            ('<NewSpeech>MR. GIKARIA: </Newspeech>', ('MR. GIKARIA: ', ['newspeech'])),
+            ('<HEADER>MOTIONS</header>', ('MOTIONS', ['header'])),
+            ('<Header>MOTIONS</Header>', ('MOTIONS', ['header'])),
+            ('<Header>MOTIONS</HEADER>', ('MOTIONS', ['header'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_tag_with_spacing(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where there is spacing
+        between the angle brackets and the tag name (e.g. `< Header >`).
+        """
+        strings = [
+            ('< HEADER >MOTIONS</ header >', ('MOTIONS', ['header'])),
+            ('< HEADER >MOTIONS</\nheader>', ('MOTIONS', ['header'])),
+            ('< Sub HEADER >Question No. 259</\n sub header>', ('Question No. 259', ['subheader'])),
+            ('< NewSpeech >MR. GIKARIA: </ Newspeech >', ('MR. GIKARIA: ', ['newspeech'])),
+            ('<  NewSpeech>MR. GIKARIA: < /Newspeech>', ('MR. GIKARIA: ', ['newspeech'])),
+            ('<NewSpeech >MR. GIKARIA: <  /Newspeech  >', ('MR. GIKARIA: ', ['newspeech'])),
+            ('<New Speech >MR. GIKARIA: <  /New speech  >', ('MR. GIKARIA: ', ['newspeech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_tag_wrong_closing(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where the closing tag
+        has incorrect syntax (e.g. `<header />`, `<header>`).
+        """
+        strings = [
+            ('<header>MOTIONS<header />', ('MOTIONS', ['header'])),
+            ('<header>MOTIONS<header/ >', ('MOTIONS', ['header'])),
+            ('<header>MOTIONS<header / >', ('MOTIONS', ['header'])),
+            ('<header>MOTIONS<header>', ('MOTIONS', ['header'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_tag_missing_bracket(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where there is a
+        missing angle bracket (e.g. `<header`).
+        """
+        strings = [
+            ('<header MOTIONS</header>', ('MOTIONS', ['header'])),
+            ('<header>MOTIONS /header>', ('MOTIONS', ['header'])),
+            ('header>MOTIONS /header>', ('MOTIONS', ['header'])),
+            ('header>MOTIONS </header', ('MOTIONS ', ['header'])),
+            ('<header>MOTIONS<header / >', ('MOTIONS', ['header'])),
+            ('<header>MOTIONS<header>', ('MOTIONS', ['header'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_tag_missing_close(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where there is no
+        closing tag in the line.
+        """
+        strings = [
+            ('<header>MOTIONS', ('MOTIONS', ['header'])),
+            ('<NewSpeech>MR. GIKARIA: ', ('MR. GIKARIA: ', ['newspeech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_tag_missing_open(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where there is no
+        opening tag in the line.
+        """
+        strings = [
+            ('MOTIONS</header>', ('MOTIONS', ['header'])),
+            ('MOTIONS<header>', ('MOTIONS', ['header'])),
+            ('MR. GIKARIA: </NewSpeech>', ('MR. GIKARIA: ', ['newspeech'])),
+            ('MR. GIKARIA: <NewSpeech>', ('MR. GIKARIA: ', ['newspeech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_extract_tag_mismatched(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where the
+        open and close tags are mis-matched.
+        """
+        strings = [
+            ('<header>MOTIONS</subheader>', ('MOTIONS', ['header', 'subheader'])),
+            ('<speech>MOTIONS</subheader>', ('MOTIONS', ['speech', 'subheader'])),
+            ('<NewSpeech>MR. GIKARIA: </header>', ('MR. GIKARIA: ', ['header', 'newspeech'])),
+            ('<NewSpeech>MR. GIKARIA: </speech>', ('MR. GIKARIA: ', ['newspeech', 'speech'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_dont_extract_erroneous_bracket(self):
+        """tests that `extract_flatworld_tags` does not extract tags where an angle bracket
+        appears but is not a tag (e.g. `del<i`).
+
+        This occurs sometimes due to OCR errors.
+        """
+        strings = [
+            ('del<i', ('del<i', [])),
+            ('del<i>', ('del<i>', [])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+
+
+    def test_dont_extract_other_tags(self):
+        """tests that `extract_flatworld_tags` does not extract non-flatworld tags.
+        (e.g. <i>text</i>).
+        """
+        strings = [
+            ('<i>text</i>', ('<i>text</i>', [])),
+            ('<b>text</i>', ('<b>text</i>', [])),
+            ('<div>text</div>', ('<div>text</div>', [])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_tag_others_nested(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where there
+        are other nested tags.
+        """
+        strings = [
+            ('<newspeech>Mr. Speaker: Anyone <b>here</b> from the Ministry of</newspeech>', ('Mr. Speaker: Anyone <b>here</b> from the Ministry of', ['newspeech'])),
+            ('<header><b>MOTIONS</b></header>', ('<b>MOTIONS</b>', ['header'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_tag_is_nested(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where the
+        Flatworld tag is nested.
+        """
+        strings = [
+            ('<i><newspeech>Mr. Speaker: Anyone here from the Ministry of</newspeech></i>', ('<i>Mr. Speaker: Anyone here from the Ministry of</i>', ['newspeech'])),
+            ('<b><header>MOTIONS</header></b>', ('<b>MOTIONS</b>', ['header'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
+    
+
+    def test_extract_tag_mid_nested(self):
+        """tests that `extract_flatworld_tags` is insensitive to cases where the
+        Flatworld tag is nested and there are other tags nested within the
+        Flatworld tag (e.g. <b><newspeech><i>text</i></newspeech></b>).
+        """
+        strings = [
+            ('<i><newspeech>Mr. Speaker: Anyone <b>here</b> from the Ministry of</newspeech></i>', ('<i>Mr. Speaker: Anyone <b>here</b> from the Ministry of</i>', ['newspeech'])),
+            ('<b><header><i>MOTIONS</i></header></b>', ('<b><i>MOTIONS</i></b>', ['header'])),
+        ]
+        for s, expected in strings:
+            s2, tags = utils.extract_flatworld_tags(s)
+            self.assertEqual(s2, expected[0])
+            self.assertEqual(tags, expected[1])
 
 
 if __name__ == '__main__':
