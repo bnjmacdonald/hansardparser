@@ -9,30 +9,34 @@ import pandas as pd
 from hansardparser.plenaryparser import utils
 
 
-def convert_contents(contents, attributes, to_format, verbose=False):
+def convert_contents(contents, attributes, to_format, verbosity: int = 0):
     """converts raw contents to a specified format.
 
     Arguments:
+        
         contents : list of Entries
             list of entries as output by HansardParser._process_transcript.
+        
         attributes : list of str
             list of Entry attributes that are desired for the output.
-        to_format : str
+        
+        to_format : str.
             Desired output format. Either 'list', 'df-raw', or 'df-long'.
             'df-raw' is a pandas dataframe where each row is an entry. This format is more useful for comparing the parsed transcript to the original pdf for errors.
             'df-long' is a multi-index pandas dataframe (where header and subheader are the indices). This format is more useful for analysis since speeches are organized under headers and subheaders.
             'list' is a 2d list.
-        verbose : bool
-            False by default. Set to True if more detailed output is desired.
+        
+        verbosity : int = 0.
+            Set to 1 or 2 if more detailed output is desired.
     """
     if to_format not in ['list', 'df-raw', 'df-long']:
         raise RuntimeError('to_format must be either \'list\', \'df-raw\', or \'df-long\'.')
     if to_format == 'list':
-        result = contents_to_2darray(contents, attributes, verbose)
+        result = contents_to_2darray(contents, attributes, verbosity)
     if to_format == 'df-raw':
         result = contents_to_df_raw(contents, attributes)
     if to_format == 'df-long':
-        result = contents_to_df_long(contents, attributes, verbose)
+        result = contents_to_df_long(contents, attributes, verbosity)
     return result
 
 
@@ -50,10 +54,10 @@ def contents_to_df_raw(contents, attributes):
     return df
 
 
-def contents_to_df_long(contents, attributes, verbose):
+def contents_to_df_long(contents, attributes, verbosity: int = 0):
     """converts a dictionary of contents (produced by contents_to_dict) to a
     pandas DataFrame. """
-    contents_2d = contents_to_2darray(contents, attributes, verbose)
+    contents_2d = contents_to_2darray(contents, attributes, verbosity)
     # contents_dict_mod = collections.OrderedDict()
     columns = ['header', 'subheader', 'subsubheader'] + attributes
     df = pd.DataFrame(contents_2d, columns=columns)
@@ -61,7 +65,7 @@ def contents_to_df_long(contents, attributes, verbose):
     return df
 
 
-def contents_to_2darray(contents, attributes, verbose):
+def contents_to_2darray(contents, attributes, verbosity: int = 0):
     """Converts a list of entries to a 2d array."""
     # transcript_dict = collections.OrderedDict()
     # NOTE TO SELF: this first while loop is a temporary block to pop entries until the first header is encountered. This may lose some valuable information at the beginning of the transript if for some reason the first header does not appear for a while or was not entered correctly in contents.
@@ -72,7 +76,7 @@ def contents_to_2darray(contents, attributes, verbose):
     # while entry.entry_type != 'header':
     #     prelim.append(entry)
     #     entry = contents.pop(0)
-    #     if verbose and len(prelim) > 5:
+    #     if verbosity and len(prelim) > 5:
     #         warnings.warn('More than 5 entries encountered before first header', RuntimeWarning)
 
     # contents.insert(0, entry)  # re-insert first header back into contents.
@@ -105,7 +109,7 @@ def contents_to_2darray(contents, attributes, verbose):
             data.append([current_header, current_subheader, current_subsubheader] + current_speech)
         else:
             warnings.warn(f'Entry type {entry.entry_type} not recognized. Entry: {entry.__dict__}', RuntimeWarning)
-    # if verbose and len(transcript_dict['preliminary']['no_subheading']['no_subsubheading']) > 5:
+    # if verbosity and len(transcript_dict['preliminary']['no_subheading']['no_subsubheading']) > 5:
     #     warnings.warn('More than 5 entries encountered before first header', RuntimeWarning)
     return data
 
