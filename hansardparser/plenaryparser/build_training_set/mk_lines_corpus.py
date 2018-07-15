@@ -84,8 +84,8 @@ def main() -> None:
         else:
             # TODO: skip lines with a note.
             lines = pd.read_csv(args.input)
-            # keeps only lines where label exists and is not equal to 'blank' or 'garbage'
-            lines = lines[(lines.label.notnull()) & (~lines.label.isin(['blank', 'garbage']))]
+            # keeps only lines where label exists and is not equal to 'blank'.
+            lines = lines[(lines.label.notnull()) & (~lines.label.isin(['blank']))]
             assert lines.text.isnull().sum() == 0, "Every line should have a non-null text value."
             labels, label_codes = _assign_label_codes(lines.label.tolist())
             lines = [{'text': l['text'], '_id': f"{l['_id']}-{l['line']}"} for ix, l in lines.iterrows()]
