@@ -14,16 +14,20 @@ import time
 import warnings
 from typing import List, Union, Optional, Tuple
 import pandas as pd
-# from bs4 import BeautifulSoup, Tag, NavigableString
+from bs4 import Tag
 from unicodedata import normalize
 
 from hansardparser.plenaryparser import utils
 from hansardparser.plenaryparser.models.Entry import Entry
 from hansardparser.plenaryparser.models.Sitting import Sitting
 from hansardparser.plenaryparser.HansardParser import HansardParser
+from hansardparser.plenaryparser.TxtParser.LineLabeler import RuleLineLabeler, SupervisedLineLabeler
+from hansardparser.plenaryparser.TxtParser.SpeakerParser import RuleSpeakerParser
 from hansardparser import settings
 
-HEADERS_PATH = os.path.join(settings.DATA_ROOT, 'generated', 'plenaryparser', 'headers.txt')
+
+ACCEPTABLE_LINE_LABELERS = ['supervised', 'rule']
+ACCEPTABLE_SPEAKER_PARSERS = ['rule']
 
 
 class TxtParser(HansardParser):
@@ -32,20 +36,75 @@ class TxtParser(HansardParser):
 
     Attributes:
 
-        see parent class (`Hansardparser`).
+        line_labeler: str = 'rule'. One of: ['supervised', 'rule']. If 'supervised', uses a
+            trained classifier to predict the line label. If 'rule', uses rules
+            (regexes and boolean tests) to determine the line label.
+        
+        line_predict_kws: dict = None. Dict of keyword arguments to pass to
+            `predict_from_strings`. Only used if line_labeler == 'supervised'.
+            Example::
+
+                {'builder_path': 'PATH_TO_BUILDER', 'clf_path': 'PATH_TO_CLF'}
+        
+        line_label_codes: dict = None. Dict containing the mapping from a label
+            code to the string label. Only used if line_labeler == 'supervised'. 
+            Example::
+
+                {0: 'header', 1: 'speech', 2: 'scene'}
+
+        speaker_parser: str = 'rule'. One of: ['rule']. If 'rule', uses rules
+            (regexes and boolean tests) to determine extract the speaker name
+            from a line of text.
+        
+        see parent class for additional attributes (`Hansardparser`).
 
     Usage::
 
         >>> text = # ...load an unparsed Hansard text file.
-        >>> parser = TxtParser(verbose=1)
+        >>> parser = TxtParser(verbosity=1)
         >>> results = parser.parse_hansards(text, to_format=None)
-    """
-    # headers that will be used to assign "header" vs. "subheader" label.
-    with open(HEADERS_PATH, 'r') as f:
-        headers = set([l.strip().lower() for l in f.readlines() if len(l.strip()) > 0])
+    
+    Todos:
 
-    def __init__(self, italic_phrases: List[str] = None, verbose: int = 0):
-        HansardParser.__init__(self, italic_phrases=italic_phrases, verbose=verbose)
+        TODO: have a clearer separation of the use of `text` vs. `lines` to refer
+            to either a string or list of strings.
+    """
+
+    def __init__(self,
+                 line_labeler: str = 'rule',
+                 line_predict_kws: dict = None,
+                 line_label_codes: dict = None,
+                 speaker_parser: str = 'rule',
+                 verbosity: int = 0,
+                 *args, **kwargs):
+        assert line_labeler in ACCEPTABLE_LINE_LABELERS, \
+            f'`line_labeler` must be one of {ACCEPTABLE_LINE_LABELERS}.'
+        if line_labeler == 'rule':
+            LineLabeler = RuleLineLabeler(verbosity=verbosity)
+            if verbosity > 0:
+                if line_predict_kws is not None:
+                    warnings.warn('You provided `line_predict_kws`, but `line_predict_kws` '
+                        'are only used when `line_labeler="supervised"`. `line_predict_kws` '
+                        'will not be used.')
+                if line_label_codes is not None:
+                    warnings.warn('You provided `line_label_codes`, but `line_label_codes ` '
+                        'are only used when `line_labeler="supervised"`. '
+                        '`line_label_codes` will not be used.')
+        elif line_labeler == 'supervised':
+            LineLabeler = SupervisedLineLabeler(predict_kws=line_predict_kws,
+                label_codes=line_label_codes, verbosity=verbosity)
+        else:
+            raise NotImplementedError
+        assert speaker_parser in ACCEPTABLE_SPEAKER_PARSERS, \
+            f'`speaker_parser` must be one of {ACCEPTABLE_SPEAKER_PARSERS}.'
+        if speaker_parser == 'rule':
+            SpeakerParser = RuleSpeakerParser(verbosity=verbosity)
+        else:
+            raise NotImplementedError
+        kwargs['LineLabeler'] = LineLabeler
+        kwargs['SpeakerParser'] = SpeakerParser
+        kwargs['verbosity'] = verbosity
+        HansardParser.__init__(self, *args, **kwargs)
 
 
     def parse_hansards(self,
@@ -87,10 +146,12 @@ class TxtParser(HansardParser):
         results = []
         time0 = time.time()
         sitting_texts = self._split_sittings(text)
-        for text in sitting_texts:
-            self.lines = self._preprocess_text(text)
-            metadata = self._extract_metadata()
-            entries = self._parse_entries()
+        if self.verbosity > 0:
+            print(f'Found {len(sitting_texts)} sittings in file.')
+        for sitting_text in sitting_texts:
+            lines = self._preprocess_text(sitting_text)
+            metadata = self._extract_metadata(lines)
+            entries = self._parse_entries(lines)
             if merge:
                 entries = self._merge_entries(entries)
             entries = self._clean_entries(entries)
@@ -98,7 +159,7 @@ class TxtParser(HansardParser):
                 entries = self._convert_contents(entries, to_format=to_format)
             results.append((metadata, entries))
         time1 = time.time()
-        if self.verbose:
+        if self.verbosity > 0:
             print(f'Processed {len(results)} files in {time1 - time0:.2f} seconds.')
         return results
 
@@ -114,6 +175,10 @@ class TxtParser(HansardParser):
         Returns:
 
             sitting_text: List[str].
+        
+        Todos:
+
+            TODO: write tests for this method. The whole thing is very kludgy.
         """
         # out = text.decode('utf-8')  # windows-1252
         # TODO: this method should not return List of soups. Just return a single
@@ -122,32 +187,35 @@ class TxtParser(HansardParser):
         text = normalize('NFKD', text)  # .encode('ASCII', 'ignore')
         if '|' in text:
             text = text.replace('|', '/')
-            if self.verbose > 0:
+            if self.verbosity > 0:
                 warnings.warn('Found "|" in this document. Replaced with "/".', RuntimeWarning)
         # split single text file by sitting.
-        sitting_end_regex = re.compile(r'([\n\r]the house rose at .{1,50}\n)', re.IGNORECASE|re.DOTALL)
+        sitting_end_regex = re.compile(r'[\n\r](<i>)?the house rose at .{1,50}[\n\r]', re.IGNORECASE|re.DOTALL)
         split_text = sitting_end_regex.split(text)
         new_split_text = []
         for i in range(0, len(split_text), 2):
             try:
-                assert len(split_text[i+1]) < 100
+                assert len(split_text[i+1]) < 100, 'this text is supposed to be less than 100 characters.'
                 new_split_text.append(split_text[i] + '\n' + split_text[i+1])
-            except IndexError:
+            except (IndexError, TypeError):
                 # for split_text[-1]
                 new_split_text.append(split_text[i])
         assert new_split_text[-1] == split_text[-1]
         sitting_texts = []
         for i, text in enumerate(new_split_text):
             # soup = BeautifulSoup(text, 'html.parser')
-            sitting_texts.append(text)
+            if len(text) > 0:  # NOTE: might not be necessary?
+                sitting_texts.append(text)
         return sitting_texts
 
 
     def _preprocess_text(self, text: str) -> List[str]:
         """splits text on line breaks and skips over lines with no length.
         """
-        # extracts whitespace tags.
-        # num_descendants = sum([1 for d in self.soup.descendants])
+        # NOTE: the splitting regex in the line below leads to
+        # differences from the line numbers in the original text file. This
+        # is only a problem if you want to make direct comparisons to the
+        # original text file.
         text = re.split(r'[\n\r]+', text)
         num_lines = len(text)
         new_text = []
@@ -159,7 +227,7 @@ class TxtParser(HansardParser):
         # for tag in self.soup.descendants:
         #     tag_text = tag.text.strip() if isinstance(tag, Tag) else tag.string.strip()
         #     if re.search(r'\s{4,}', tag_text):
-        #         if self.verbose > 2:
+        #         if self.verbosity > 2:
         #             print(f'splitting tag: {tag}')
         #         split_text = re.split(r'\s{4,}', tag_text)
         #         current_tag = tag
@@ -177,14 +245,14 @@ class TxtParser(HansardParser):
         #             current_tag = new_tag
         # num_descendants_after = sum([1 for d in self.soup.descendants])
         num_lines_after = len(new_text)
-        if self.verbose > 1:
+        if self.verbosity > 1:
             print(f'Number of lines before preprocessing: {num_lines}')
             print(f'Number of lines after preprocessing: {num_lines_after}')
         return new_text
 
 
 
-    def _extract_metadata(self, metadata: Sitting = None, max_check: int = 50) -> Sitting:
+    def _extract_metadata(self, lines: List[str], metadata: Sitting = None, max_check: int = 50) -> Sitting:
         """extracts metadata from the initial lines in contents.
 
         Todos:
@@ -197,27 +265,27 @@ class TxtParser(HansardParser):
             metadata = Sitting()
         i = 0
         lines_to_rm = []
-        max_check = min(max_check, len(self.lines))
+        max_check = min(max_check, len(lines))
         while i < max_check and metadata.is_incomplete():
-            line = self.lines[i]
+            line = lines[i]
             added = self._add_to_meta(line, metadata)
             i += 1
             if added:
-                if self.verbose > 1:
+                if self.verbosity > 1:
                     print(f'Added line to metadata: {line}')
                     print(f'Updated metadata: {metadata}')
                 lines_to_rm.append(i)
             elif utils.is_page_date(line) or utils.is_page_heading(line) or utils.is_page_number(line):
                 lines_to_rm.append(i)
         for i in sorted(lines_to_rm)[::-1]:
-            self.lines.pop(i)
+            lines.pop(i)
         # combines date and time.
         if metadata.date is not None:
             if metadata.time is not None:
                 regex = re.search(r'(?P<hour>\d{1,2})\.(?P<min>\d{1,2})', metadata.time)
                 metadata.date = metadata.date.replace(hour=int(regex.group('hour')), minute=int(regex.group('min')))
             del metadata.time
-        if self.verbose > 0 and metadata.date is None:
+        if self.verbosity > 0 and metadata.date is None:
             warnings.warn('No date found in sitting.', RuntimeWarning)
         return metadata
 
@@ -263,86 +331,26 @@ class TxtParser(HansardParser):
         return False
 
 
-    def _parse_entries(self):
-        """Parses a Hansard Sitting transcript.
+    def _parse_entries(self, lines: List[str]) -> List[Entry]:
+        """Parses a Hansard Sitting transcript into a list of 'entries'.
 
-        Assigns a "label" to each line (one of: header, speech, scene, or garbage),
-            extracts the speaker name from the beginning of each line (where
-            applicable), and parses each speaker name into the speaker's title,
-            cleaned name, and appointment.
-
-        NOTE: each step in this method could be replaced with a trained classifier.
+        Assigns a "label" to each line, extracts the speaker name from the
+        beginning of each line (where applicable), and parses each speaker
+        name into the speaker's title, cleaned name, and appointment.
 
         Returns:
 
-            contents_merged : list of Entry objects. a processed and cleaned
+            contents_merged: List[Entry]. a processed and cleaned
                 list of Entry objects representing each entry in the transcript.
         """
-        labels = self._extract_labels()
-        speaker_names, texts = self._extract_speaker_names(labels)
-        parsed_speaker_names = self._parse_speaker_names(speaker_names)
+        labels = self.LineLabeler.label_lines(lines)
+        if self.verbosity > 1:
+            for i, label in enumerate(labels):
+                if label is None:
+                    warnings.warn(f'Did not find label for line: "{lines[i]}"', RuntimeWarning)
+        speaker_names, parsed_speaker_names, texts = self.SpeakerParser.extract_speaker_names(lines, labels)
         entries = self._create_entries(texts, labels, speaker_names, parsed_speaker_names)
         return entries
-
-
-    def _extract_labels(self) -> List[str]:
-        labels = []
-        for line in self.lines:
-            label = self._get_line_label(line)
-            labels.append(label)
-            if label is None and self.verbose > 1:
-                warnings.warn(f'Did not find entry_type for line: "{line}"', RuntimeWarning)
-        return labels
-
-
-    def _extract_speaker_names(self, labels: List[str]) -> Tuple[List[str], List[str]]:
-        """extracts the speaker name from the beginning of each line.
-
-        Extracts the speaker name from the beginning of each line. Only extracts
-            speaker names where `label[i] == 'speech'`.
-
-        Returns:
-
-            speaker_names, texts: Tuple[List[str], List[str]].
-
-                speaker_names: List[str]. List of speaker names, of same length
-                    as `labels`. If `label[i] != 'speech'` or no speaker name
-                    is found, then `speaker_name[i] = None`.
-
-                texts: List[str]. Lines of text after speaker name has been
-                    extracted.
-        """
-        speaker_names = []
-        texts = []
-        for i, line in enumerate(self.lines):
-            speaker_name = None
-            text, _, _ = utils.extract_outer_tag(line) # KLUDGE: ...
-            if labels[i] == 'speech':
-                speaker_name, text = utils.extract_speaker_name(text)
-                # speaker_cleaned, title, appointment = utils.parse_speaker_name(speaker_name)
-            speaker_names.append(speaker_name)
-            texts.append(text)
-            # prev_speaker = speaker_name
-        return speaker_names, texts
-
-
-    def _parse_speaker_names(self, speaker_names: List[Optional[str]]) -> List[Tuple[str, str, str]]:
-        """parses each speaker name in list of speaker names.
-
-        Each speaker name is parsed by splitting a name into the speaker's title,
-        cleaned name, and appointment.
-
-        Returns:
-
-            parsed_names: List[Tuple[str, str, str]]. List of parsed names.
-                If an input speaker name is None, the parsed name will be
-                `(None, None, None)`.
-        """
-        parsed_names = []
-        for i, name in enumerate(speaker_names):
-            parsed_name = utils.parse_speaker_nameV2(name)
-            parsed_names.append(parsed_name)
-        return parsed_names
 
 
     def _create_entries(self,
@@ -350,6 +358,8 @@ class TxtParser(HansardParser):
                         labels: List[str],
                         speaker_names: List[str],
                         parsed_speaker_names: List[tuple]) -> List[Entry]:
+        """converts data into a list of Entry objects.
+        """
         entries = []
         for i in range(len(texts)):
             # if entry_type in ['speech_new', 'speech_ctd']:
@@ -359,187 +369,13 @@ class TxtParser(HansardParser):
                 page_number=None, speaker_cleaned=speaker_cleaned, title=title,
                 appointment=appointment)
             entries.append(entry)
-            if self.verbose > 1:
+            if self.verbosity > 1:
                 print('------------------------')
                 print(f'Line number: {i}')
                 print(f'Speaker name: {speaker_names[i]}')
                 print(f'Entry type: {labels[i]}')
                 print(f'Text: {texts[i]}')
         return entries
-
-
-    def _get_line_label(self,
-                        line: str,
-                        check_if_page_header: bool = False) -> Optional[str]:
-        """Returns the label of a line.
-
-        Possible labels: [header, speech, scene, garbage, punct].
-
-        Arguments:
-
-            line: str. A single element from body.contents.
-
-            check_if_page_header: bool. If True, checks if line is a page number
-                or page header (and returns "garbage" label if so).
-
-        Returns:
-
-            label: Optional[str]. Label of line. One of: [header, speech, scene,
-                garbage, punct]. If no label is found, returns None.
-        
-        Todos:
-
-            TODO: lines with a speaker name in all caps get labeled as a header.
-                Examples::
-
-                    `MR. OMYAHCHA (CTD.):`
-                    `MR. BIDU (CTD):`
-
-                One way to address this would be to try to extract a speaker name
-                from the line. If a speaker name is extracted, then it is a speech.
-        """
-        if self._is_garbage(line, check_if_page_header):
-            return 'garbage'
-        if utils.is_punct(line, True):
-            return 'punct'
-        line_text, open_tag, close_tag = utils.extract_outer_tag(line)
-        open_tag = open_tag.strip().lower() if open_tag else open_tag
-        close_tag = close_tag.strip().lower() if close_tag else close_tag
-        test_results = {
-            'header': self._is_header(line_text, open_tag, close_tag),
-            'subheader': self._is_subheader(line_text, open_tag, close_tag),
-            'subsubheader': self._is_subsubheader(line_text, open_tag, close_tag),
-            'speech': self._is_speech(line_text, open_tag, close_tag),
-            'scene': self._is_scene(line_text, open_tag, close_tag)
-        }
-        if sum(test_results.values()) > 1:
-            # KLUDGE: gives precedence to header over speech
-            if test_results['speech'] and test_results['header']:
-                test_results['speech'] = False
-            # KLUDGE: gives precedence to scene over speech
-            if test_results['speech'] and test_results['scene']:
-                test_results['speech'] = False
-            # KLUDGE: gives precedence to header over scene
-            if test_results['header'] and test_results['scene']:
-                test_results['scene'] = False
-        if self.verbose > 0 and sum(test_results.values()) > 1:
-            warnings.warn(f'Multiple labels found for line: {line};\nLabels found: {", ".join([k for k, v in test_results.items() if v])}')
-        # returns label string.
-        for k, v in test_results.items():
-            if v:
-                return k
-        if self.verbose > 0:
-            warnings.warn(f'Did not find label for line: {line}', RuntimeWarning)
-        return None
-
-
-    def _is_garbage(self, line: str, check_if_page_header: bool = False) -> bool:
-        """checks if line fits conditions for a "garbage" label. Returns True if
-        so, False otherwise.
-
-        Arguments:
-
-            line: bs4 tag object. A single element from body.contents.
-
-            check_if_page_header: bool. If True, checks if line is a page number
-                or page header (and returns "garbage" label if so).
-        """
-        # checks for page number, heading, date.
-        if line is None or len(line) == 0:
-            return True
-        if check_if_page_header:  # if less than 10 lines from start of page...
-            if utils.is_page_number(line) or utils.is_page_heading(line) or utils.is_page_date(line):
-                return True
-        if utils.is_page_footer(line):
-            return True
-        return False
-
-
-    def _is_header(self, line: str, open_tag: Optional[str], close_tag: Optional[str]) -> bool:
-        """checks if line fits conditions for a "header" label. Returns True if
-        so, False otherwise."""
-        # text_eq_upper = line == line.upper()
-        # tag_is_header = (open_tag and 'header' in open_tag) or (close_tag and 'header' in close_tag)
-        is_header = bool(
-            line.strip().lower() in self.headers
-            # tag_is_header or
-            # (text_eq_upper and not line.endswith('.'))
-        )
-        # header_test = header_test1 or header_test2
-        # if is_header and len(utils.rm_punct(line)) < 5 and re.search(r'\d', line):
-        #     prev_entry_type = self._get_line_label(line.prev_sibling, False)
-        #     next_entry_type = self._get_line_label(line.next_sibling, False)
-        #     is_header = prev_entry_type == 'header' or next_entry_type == 'header'
-        return is_header
-
-    def _is_subheader(self, line: str, open_tag: Optional[str], close_tag: Optional[str]) -> bool:
-        """checks if line fits condition for a "subheader" label. Returns True if
-        so, False otherwise.
-        """
-        text_eq_upper = line == line.upper()
-        tag_is_subheader = (open_tag and 'header' in open_tag) or (close_tag and 'header' in close_tag)
-        is_subheader = bool(
-            line.strip().lower() not in self.headers
-            and (
-                tag_is_subheader or
-                (text_eq_upper and not line.endswith('.')) or
-                self.__is_special_header(line)  # KLUDGE: ...
-            )
-        )
-        return is_subheader
-
-
-    def _is_subsubheader(self, line: str, open_tag: Optional[str], close_tag: Optional[str]) -> bool:
-        """checks if line fits conditions for a "subsubheader" label. Returns True if
-        so, False otherwise."""
-        tag_is_subsubheader = (open_tag and 'subsubheader' in open_tag) or (close_tag and 'subsubheader' in close_tag)
-        is_subsubheader = bool(
-            tag_is_subsubheader or
-            bool(re.search(r'^clause|^question no|^no[\.,] \d{1,4}$|^\(the house resumed\)|^(first|'
-                      r'second|third|fourth|fifth|sixth) schedule$', line, re.IGNORECASE))
-        )
-        return is_subsubheader
-
-
-    def __is_special_header(self, line: str) -> bool:
-        """checks if line fits conditions for a "special_header" label. Returns True if
-        so, False otherwise.
-
-        "special_headers" are kind of an awkward category. Currently,
-        special_headers include the "first reading [...]" and "second reading [...]"
-        headers. The reason these are classified as a special header is because
-        they need to be treated differently in post-processsing the extracted text
-        (i.e. when merging together consecutive headers). See XmlParser for how
-        this post-processing works.
-        """
-        is_special_header = bool(
-            re.search(r'^first reading|^second reading', line, re.IGNORECASE)
-        )
-        return is_special_header
-
-
-    def _is_speech(self, line: str, open_tag: Optional[str], close_tag: Optional[str]) -> bool:
-        """checks if line fits conditions for a "speech" label. Returns True if
-        so, False otherwise."""
-        text_neq_upper = line != line.upper()
-        tag_is_speech_new = open_tag == 'newspeech' or close_tag == 'newspeech'
-        is_speech_new = bool(
-            tag_is_speech_new or
-            text_neq_upper
-        )
-        return is_speech_new
-
-
-    def _is_scene(self, line: str, open_tag: Optional[str], close_tag: Optional[str]) -> bool:
-        """checks if line fits conditions for a "scene" label. Returns True if
-        so, False otherwise."""
-        text_neq_upper = line != line.upper()
-        tag_is_scene = open_tag == 'scene' or close_tag == 'scene'
-        scene_test = bool(
-            tag_is_scene or
-            (text_neq_upper and bool(re.search(r'^[\(\[].+[\)\]]$', line, re.DOTALL)))  # starts with and ends with parentheses
-        )
-        return scene_test
 
 
     def _merge_entries(self, entries: List[Entry]) -> List[Entry]:
@@ -549,7 +385,7 @@ class TxtParser(HansardParser):
         while len(entries) > 0:
             entry = entries.pop(0)
             if prev_entry.can_merge(entry) and len(entries_merged):
-                prev_entry.merge_entries(entry, self.verbose)
+                prev_entry.merge_entries(entry, self.verbosity)
                 entries_merged[-1] = prev_entry
             else:
                 entries_merged.append(entry)
@@ -562,6 +398,10 @@ class TxtParser(HansardParser):
 
         This method is called after the list of entries has been constructed and
         merged.
+
+        Todos:
+
+            TODO: remove html tags from text.
         """
         # cleans text.
         entries_merged = []
