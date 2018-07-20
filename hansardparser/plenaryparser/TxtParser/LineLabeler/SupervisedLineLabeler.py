@@ -11,12 +11,26 @@ from hansardparser.plenaryparser.build_training_set.utils import str2ascii_safe
 
 
 class SupervisedLineLabeler(object):
+    """Invokes a trained classifier to assign a label to each line of a Hansard
+    transcript.
+    
+    Label is one of: [header, subheader, subsubheader, speech, scene, garbage].
+
+    Attributes:
+
+        predict_kws: dict. Dict of keyword arguments to pass to `predict_from_strings`.
+
+        label_codes: dict. Dict of mappings from a numeric code to a string label.
+            Example::
+
+                {0: 'header', 1: 'speech', 2: 'scene', 3: 'garbage'}
+    """
     
     def __init__(self, predict_kws: dict, label_codes: dict, verbosity: int = 0):
         self.predict_kws = predict_kws
         self.label_codes = label_codes
         self.verbosity = verbosity
-        # KLUDGE: for temporary use to assist where superivsed line labeler needs
+        # KLUDGE: for temporary use to assist where supervised line labeler needs
         # help.
         self.RuleLineLabeler = RuleLineLabeler(verbosity=verbosity)
 

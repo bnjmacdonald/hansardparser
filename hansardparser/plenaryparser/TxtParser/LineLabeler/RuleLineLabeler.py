@@ -16,7 +16,7 @@ HEADERS_PATH = os.path.join(settings.DATA_ROOT, 'generated', 'plenaryparser', 'h
 
 
 class RuleLineLabeler(object):
-    """Implements the RuleLineLabeler class.
+    """Uses rules to assign a label to each line in a Hansard transcript.
     
     Uses rules (regular expressions and boolean tests) to assign a label to a line
     of Hansard text. Label is one of: [header, subheader, subsubheader, speech, scene, garbage]
