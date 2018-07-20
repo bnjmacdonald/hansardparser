@@ -22,48 +22,57 @@ from hansardparser.plenaryparser.models.Entry import Entry
 from hansardparser.plenaryparser.models.Sitting import Sitting
 from hansardparser.plenaryparser.HansardParser import HansardParser
 from hansardparser.plenaryparser.TxtParser.LineLabeler import RuleLineLabeler, SupervisedLineLabeler
-from hansardparser.plenaryparser.TxtParser.SpeakerParser import RuleSpeakerParser
+from hansardparser.plenaryparser.TxtParser.SpeakerParser import RuleSpeakerParser, SupervisedSpeakerParser
+
 from hansardparser import settings
 
 
 ACCEPTABLE_LINE_LABELERS = ['supervised', 'rule']
-ACCEPTABLE_SPEAKER_PARSERS = ['rule']
+ACCEPTABLE_SPEAKER_PARSERS = ['supervised', 'rule']
 
 
 class TxtParser(HansardParser):
-    """The TxtParser class parses Hansard txt files into a structured array of
+    f"""The TxtParser class parses Hansard txt files into a structured array of
     speeches.
 
     Attributes:
 
-        line_labeler: str = 'rule'. One of: ['supervised', 'rule']. If 'supervised', uses a
+        line_labeler: str = 'rule'. One of: {ACCEPTABLE_LINE_LABELERS}. If 'supervised', uses a
             trained classifier to predict the line label. If 'rule', uses rules
             (regexes and boolean tests) to determine the line label.
-        
+
         line_predict_kws: dict = None. Dict of keyword arguments to pass to
             `predict_from_strings`. Only used if line_labeler == 'supervised'.
             Example::
 
-                {'builder_path': 'PATH_TO_BUILDER', 'clf_path': 'PATH_TO_CLF'}
-        
+                {{'builder_path': 'PATH_TO_BUILDER', 'clf_path': 'PATH_TO_CLF'}}
+
         line_label_codes: dict = None. Dict containing the mapping from a label
             code to the string label. Only used if line_labeler == 'supervised'. 
             Example::
 
-                {0: 'header', 1: 'speech', 2: 'scene'}
+                {{0: 'header', 1: 'speech', 2: 'scene'}}
 
-        speaker_parser: str = 'rule'. One of: ['rule']. If 'rule', uses rules
-            (regexes and boolean tests) to determine extract the speaker name
-            from a line of text.
+        speaker_parser: str = 'rule'. One of: {ACCEPTABLE_SPEAKER_PARSERS}. If 'supervised',
+            uses a trained classifier to extract the speaker name. If 'rule', uses
+            rules (regexes and boolean tests) to extract the speaker name from a
+            line of text.
         
-        see parent class for additional attributes (`Hansardparser`).
+        speaker_predict_kws: dict = None. Dict of keyword arguments to pass to
+            `predict_from_strings` for speaker parser. Only used if
+            speaker_parser == 'supervised'.
+            Example::
+
+                {{'builder_path': 'PATH_TO_BUILDER', 'clf_path': 'PATH_TO_CLF'}}
+
+        see parent class (`Hansardparser`) for additional attributes.
 
     Usage::
 
         >>> text = # ...load an unparsed Hansard text file.
         >>> parser = TxtParser(verbosity=1)
         >>> results = parser.parse_hansards(text, to_format=None)
-    
+
     Todos:
 
         TODO: have a clearer separation of the use of `text` vs. `lines` to refer
@@ -75,6 +84,7 @@ class TxtParser(HansardParser):
                  line_predict_kws: dict = None,
                  line_label_codes: dict = None,
                  speaker_parser: str = 'rule',
+                 speaker_predict_kws: dict = None,
                  verbosity: int = 0,
                  *args, **kwargs):
         assert line_labeler in ACCEPTABLE_LINE_LABELERS, \
@@ -99,6 +109,9 @@ class TxtParser(HansardParser):
             f'`speaker_parser` must be one of {ACCEPTABLE_SPEAKER_PARSERS}.'
         if speaker_parser == 'rule':
             SpeakerParser = RuleSpeakerParser(verbosity=verbosity)
+        elif speaker_parser == 'supervised':
+            SpeakerParser = SupervisedSpeakerParser(predict_kws=speaker_predict_kws,
+                verbosity=verbosity)
         else:
             raise NotImplementedError
         kwargs['LineLabeler'] = LineLabeler
