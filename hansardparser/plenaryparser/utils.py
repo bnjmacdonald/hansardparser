@@ -1,13 +1,14 @@
+
 import os
 import numpy as np
-import pandas as pd
+from typing import Tuple, Optional, List
 import collections
 import datetime
 import pytz
 import string
 import re
 import calendar
-from hansardparser.plenaryparser.text_utils import is_english_word
+from text_utils import is_english_word
 
 def get_file_paths(input_dirs, verbose=0):
     file_paths = []
@@ -182,7 +183,13 @@ def extract_parenth_name(text, name_at_begin=True):
     """Extracts a name in parentheses from the beginning of a speech.
 
     Returns:
+        
         the name and the following text.
+    
+    Example::
+
+        >>> extract_parenth_name('Hon. Mwakileo (The Minister for Agriculture)', False)
+        ('The Minister for Agriculture', 'Hon. Mwakileo')
     """
     if name_at_begin:
         parenth_reg = re.compile(r'^\s*(?P<in_parenth>\(.+\))\s*:\s*(?P<out_parenth>.*)', re.DOTALL)
@@ -208,6 +215,11 @@ def clean_speaker_name(name):
 def parse_speaker_name(name):
     """decomposes speaker name into "speaker_cleaned", "title", and
     "appointment".
+
+    Todos:
+
+        TODO: this has been deprecated for TxtParser. Check if I can also deprecate
+            it for XML parser.
     """
     if name is None:
         return None, None, None
@@ -222,7 +234,9 @@ def parse_speaker_name(name):
     name = rm_punct(name)
     appt = rm_punct(appt)
     # removes titles.
-    reg_title = re.compile(r'^\s*(?P<title>mr |bw |ms |bi |hon |capt |mrs |dr |prof |gen |maj-gen |maj |major |an hon|a hon|eng |engineer |col |rtd |rev |sen |mheshimiwa)(?P<name>.+)', re.IGNORECASE | re.DOTALL)
+    reg_title = re.compile(r'^\s*(?P<title>mr |bw |ms |bi |hon |capt |mrs |dr '
+        r'|prof |gen |maj-gen |maj |major |an hon|a hon|eng |engineer |col |rtd '
+        r'|rev |sen |mheshimiwa)(?P<name>.+)', re.IGNORECASE | re.DOTALL)
     matches = reg_title.search(name)
     if matches is not None:
         name = matches.group('name').strip()
@@ -247,6 +261,7 @@ def parse_speaker_name(name):
     # entry.title = title
     # entry.appointment = appt
     return name, title, appt
+
 
 def fix_header_words(text):
     if text is None:
@@ -298,3 +313,47 @@ def rm_punct(s):
     if s is None:
         return None
     return re.sub(r'[{0}]'.format(re.escape(string.punctuation)), '', s)
+
+
+def extract_flatworld_tags(s: str) -> Tuple[str, List[str]]:
+    """extracts open and close html/xml Flatworld tags from a string.
+
+    note: the reason we do not use BeautifulSoup for this is that the Flatworld
+    tags often have syntax errors (e.g. "header>") that would not be read properly
+    by BeautifulSoup. So, instead, we use custom regular expressions to extract
+    the tags.
+
+    Flatworld tags include `["<header>", "<newspeech>", "<scene>"]` and minor
+    variants (e.g. "<speech>").
+
+    Returns:
+
+        Tuple[str, List[str]]. First element of the tuple is the string with the
+            Flatworld tags removed. Second element of the tuple is a list of the
+            unique Flatworld strings that were found and removed. If no tags are
+            found, an empty list is returned. Tags are listed in alphabetical
+            order.
+
+    Example::
+
+        >>> extract_flatworld_tags("<header><b>MOTIONS</b></header>")
+        ('<b>MOTIONS</b>', ['header'])
+    """
+    # extracts the unique Flatworld tags found.
+    inner_regex = r'[/\s]{0,3}(new[\-\s]?speech|speech|sub[\-\s]?header|header|scene|district)[/\s]{0,3}'
+    regex = re.compile(rf'<({inner_regex})>|<({inner_regex})|({inner_regex})>', flags=re.IGNORECASE)
+    result = re.findall(regex, s)
+    tags = set({})
+    if len(result):
+        for taglist in result:
+            for tag in taglist:
+                if tag is not None:
+                    tag = re.sub(r'[</>\-\s]', '', tag).lower().strip()
+                    if len(tag):
+                        tags.add(tag)
+    tags = sorted(tags)
+    # removes the Flatworld tags from the string.
+    s = re.sub(regex, '', s)
+    # if verbosity > 1 and re.search(r'(<[/ \w]{3,})|([/ \w]{3,}>)', s):
+    #     warnings.warn(f'angle bracket exists in line: {s}')
+    return s, tags

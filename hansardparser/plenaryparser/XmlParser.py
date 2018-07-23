@@ -21,10 +21,10 @@ import re
 import warnings
 from bs4 import Tag
 
-from hansardparser.plenaryparser import xml_to_pdf
-from hansardparser.plenaryparser.models.Entry import Entry
-from hansardparser.plenaryparser.HansardParser import HansardParser
-from hansardparser.plenaryparser import utils
+import xml_to_pdf
+from models.Entry import Entry
+from HansardParser import HansardParser
+import utils
 
 class XmlParser(HansardParser):
     """The Hansard_parser contains methods for parsing an Hansard PDF into
