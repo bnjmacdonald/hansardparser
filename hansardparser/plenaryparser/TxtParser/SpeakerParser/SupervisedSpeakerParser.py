@@ -1,12 +1,19 @@
 
 from typing import List, Tuple
-from hansardparser.plenaryparser.utils import extract_flatworld_tags
+from utils import extract_flatworld_tags
 
-from hansardparser.plenaryparser.classify.tf.predict import predict_from_strings
-from hansardparser.plenaryparser.TxtParser.SpeakerParser import RuleSpeakerParser
+from TxtParser.SpeakerParser import RuleSpeakerParser
 
-# TODO: ?? move this to a config file somewhere ??
+# FIXME: don't hard-code these labels.
 LABEL_CODES = {0: 'I', 1: 'O', 2: 'B'}
+
+RM_FLATWORLD_TAGS = True
+USE_CACHED_PREDICTIONS = False
+BUCKET_NAME = 'gs://hansarparser-data'
+BUCKET_PREFIX = 't2t_preds/hansard_line_has_speaker_predict'
+
+# Google Cloud Function URL
+GCF_URL = 'https://us-central1-hansardparser.cloudfunctions.net/predictHansardLineHasSpeaker'
 
 
 class SupervisedSpeakerParser(object):
@@ -15,16 +22,17 @@ class SupervisedSpeakerParser(object):
 
     Attributes:
 
-        predict_kws: dict. Dict of keyword arguments to pass to `predict_from_strings`.
+        cache_filename: str. Name of cached file where predictions are located.
 
     """
     
-    def __init__(self, predict_kws: dict, verbosity: int = 0):
-        self.predict_kws = predict_kws
+    def __init__(self, cache_filename: str = None, verbosity: int = 0):
+        self.cache_filename = cache_filename
         self.verbosity = verbosity
         # KLUDGE: for temporary use to assist where superivsed speaker parser needs
         # help.
         self.RuleSpeakerParser = RuleSpeakerParser(verbosity=verbosity)
+
 
     def extract_speaker_names(self,
                               lines: List[str],
@@ -64,7 +72,7 @@ class SupervisedSpeakerParser(object):
                 line_nums.append(i)
         # NOTE: each row in `pred_labels` is a sequence of IOB predictions (
         # each character is labeled)
-        _, _, pred_labels = predict_from_strings(line_texts, verbosity=self.verbosity, **self.predict_kws)
+        pred_labels = self._get_predictions(line_texts)
         # picks out the speaker name from the text in each line.
         speaker_names = []
         texts = []
@@ -81,9 +89,57 @@ class SupervisedSpeakerParser(object):
                     text += c
                 else:
                     raise RuntimeError(f'SupervisedSpeakerParser only accepts the '
-                        'following labels: {list(LABEL_CODES.keys())}')
+                        f'following labels: {list(LABEL_CODES.keys())}')
             speaker_names.append(speaker_name.strip())
             texts.append(text.strip())
             # prev_speaker = speaker_name
         parsed_speaker_names = self.RuleSpeakerParser._parse_speaker_names(speaker_names)
         return speaker_names, parsed_speaker_names, texts
+
+
+    def _get_predictions(self, lines: List[str]) -> List[int]:
+        """retrieves line predictions.
+        """
+        if USE_CACHED_PREDICTIONS:
+            preds = self._get_cached_predictions(lines)
+        else:
+            preds = self._get_online_predictions(lines)
+        assert len(preds) == len(lines), 'Number of predictions should equal ' \
+            f'number of transcript lines, but {len(preds)} != {len(lines)}'
+        return preds
+
+
+    def _get_online_predictions(self, lines: List[str]) -> List[int]:
+        """retrieves predictions by triggering google cloud function, which
+        invokes ml-engine to make a prediction for each line.
+        """
+        res = requests.post(GCF_URL, data=json.dumps({"instances": lines}),
+            headers={"Content-Type": "application/json"})
+        assert res.status_code == 200
+        preds = []
+        for pred in json.loads(res.content):
+            preds.append(pred['outputs'][0][0][0])
+        return preds
+
+
+    def _get_cached_predictions(self, lines: List[str]) -> List[int]:
+        """retrieves predictions from google cloud storage.
+
+        Todos:
+
+            TODO: ensure that predictions will be in same order as lines.
+        """
+        # https://cloud.google.com/storage/docs/listing-objects
+        # client = discovery.build('storage', 'v1')
+        storage_client = storage.Client()
+        prefix = f'{BUCKET_PREFIX}/{self.cache_filename}'
+        bucket = storage_client.get_bucket(BUCKET_NAME)
+        blobs = bucket.list_blobs(prefix=prefix)
+        for blob in blobs:
+            if 'errors' not in blob.name:
+                s = b'[' + blob.download_as_string().replace(b'\n', b',')[:-1] + b']'
+                preds_json = json.loads(s)
+                preds = []
+                for pred in preds_json:
+                    preds.append(pred['outputs'][0][0][0])
+        return preds
