@@ -1,0 +1,21 @@
+{
+	"name": "predict-hansard-line-type-4",
+	"description": "Given an array of lines from a Hansard transcript, predicts the type of each line.",
+	"engines": {
+		"node": ">=4.3.2"
+	},
+	"scripts": {
+		"deploy": "gcloud beta functions deploy predictHansardLineType4 --trigger-http",
+		"start": "node index.js",
+		"lint": "samples lint",
+		"pretest": "npm run lint",
+		"system-test": "samples test app",
+		"test": "npm run system-test",
+		"e2e-test": "samples test deploy"
+	},
+	"dependencies": {
+		"express": "4.15.4",
+		"googleapis": "latest",
+		"@google-cloud/debug-agent": "latest"
+	}
+}
