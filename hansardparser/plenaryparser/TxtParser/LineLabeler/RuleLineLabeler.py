@@ -3,16 +3,27 @@ import os
 import re
 import warnings
 from typing import List, Optional, Set
-from hansardparser.plenaryparser.utils import (
+from google.cloud import storage
+
+from utils import (
     is_punct,
     extract_flatworld_tags,
     is_page_number,
     is_page_heading,
     is_page_date,
     is_page_footer)
-from hansardparser import settings
 
-HEADERS_PATH = os.path.join(settings.DATA_ROOT, 'generated', 'plenaryparser', 'headers.txt')
+BUCKET_NAME = 'hansardparser-data'
+HEADERS_FILEPATH = 'generated/plenaryparser/headers.txt'
+
+
+def get_headers() -> set:
+    """retrieves headers from `headers.txt` file on google cloud storage."""
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(BUCKET_NAME)
+    blob = bucket.blob(HEADERS_FILEPATH)
+    headers = set(blob.download_as_string().strip().decode('utf-8').split('\n'))
+    return headers
 
 
 class RuleLineLabeler(object):
@@ -32,8 +43,7 @@ class RuleLineLabeler(object):
     def __init__(self, headers: Set[str] = None, verbosity: int = 0):
         if headers is None:
             # headers that will be used to assign "header" vs. "subheader" label.
-            with open(HEADERS_PATH, 'r') as f:
-                headers = set([l.strip().lower() for l in f.readlines() if len(l.strip()) > 0])
+            headers = get_headers()
         self.headers = headers
         self.verbosity = verbosity
 
