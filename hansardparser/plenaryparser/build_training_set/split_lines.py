@@ -2,9 +2,9 @@
 
 Example::
 
-    python -m hansardparser.plenaryparser.build_training_set.split_lines -v 1 \
-        --filepath data/tests/manual/speaker_name_hand_labels_w_text20.csv \
-        --outpath data/tests/generated/plenaryparser/speaker_name_hand_labels_w_text20_splits \
+    python -m build_training_set.split_lines -v 1 \
+        --filepath ../../data/tests/manual/speaker_name_hand_labels_w_text20.csv \
+        --outpath ../../data/tests/generated/plenaryparser/speaker_name_hand_labels_w_text20_splits \
         --by_sitting
 """
 
@@ -14,7 +14,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from hansardparser.plenaryparser.classify import split
+from build_training_set import split
 
 SPLIT_SIZES = {'train_size': 0.6, 'dev_size': 0.2, 'test_size': 0.2}
 ACCEPTABLE_FTYPES = set(['txt', 'csv'])

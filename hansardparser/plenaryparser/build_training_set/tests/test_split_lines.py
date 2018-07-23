@@ -4,15 +4,14 @@ import unittest
 import subprocess
 import shutil
 
-from hansardparser import settings
 
 class SplitLinesTests(unittest.TestCase):
     """tests the `split_lines` module.
     """
 
     def setUp(self):
-        self.filepath = "data/tests/manual/speaker_name_hand_labels_w_text20.csv"
-        self.outpath = "data/tests/generated/plenaryparser/speaker_name_hand_labels_w_text20_splits"
+        self.filepath = "../../data/tests/manual/speaker_name_hand_labels_w_text20.csv"
+        self.outpath = "../../data/tests/generated/plenaryparser/speaker_name_hand_labels_w_text20_splits"
 
 
     def tearDown(self):
@@ -25,7 +24,7 @@ class SplitLinesTests(unittest.TestCase):
         """
         res = subprocess.call([
             'python', '-m',
-            'hansardparser.plenaryparser.build_training_set.split_lines',
+            'build_training_set.split_lines',
             '-v', '2', '--filepath', self.filepath,
             '--outpath', self.outpath,
         ])
