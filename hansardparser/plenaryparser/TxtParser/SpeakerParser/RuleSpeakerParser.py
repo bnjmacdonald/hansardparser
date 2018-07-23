@@ -2,7 +2,7 @@
 import re
 from typing import List, Tuple, Optional
 
-from hansardparser.plenaryparser.utils import extract_flatworld_tags, clean_speaker_name
+from utils import extract_flatworld_tags, clean_speaker_name
 
 
 class RuleSpeakerParser(object):

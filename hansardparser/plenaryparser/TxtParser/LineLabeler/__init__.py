@@ -1,2 +1,2 @@
-from hansardparser.plenaryparser.TxtParser.LineLabeler.RuleLineLabeler import RuleLineLabeler
-from hansardparser.plenaryparser.TxtParser.LineLabeler.SupervisedLineLabeler import SupervisedLineLabeler
+from TxtParser.LineLabeler.RuleLineLabeler import RuleLineLabeler
+from TxtParser.LineLabeler.SupervisedLineLabeler import SupervisedLineLabeler

@@ -4,8 +4,8 @@
 import re
 import warnings
 
-from hansardparser.plenaryparser import xml_to_pdf
-from hansardparser.plenaryparser import utils
+import xml_to_pdf
+import utils
 
 class LineLabelExtractor(object):
     """Extracts line labels.

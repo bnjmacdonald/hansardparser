@@ -1,2 +1,2 @@
-from hansardparser.plenaryparser.TxtParser.SpeakerParser.RuleSpeakerParser import RuleSpeakerParser
-from hansardparser.plenaryparser.TxtParser.SpeakerParser.SupervisedSpeakerParser import SupervisedSpeakerParser
+from TxtParser.SpeakerParser.RuleSpeakerParser import RuleSpeakerParser
+from TxtParser.SpeakerParser.SupervisedSpeakerParser import SupervisedSpeakerParser

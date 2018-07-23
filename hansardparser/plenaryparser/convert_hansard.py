@@ -6,7 +6,7 @@ import os
 import warnings
 import pandas as pd
 
-from hansardparser.plenaryparser import utils
+import utils
 
 
 def convert_contents(contents, attributes, to_format, verbosity: int = 0):

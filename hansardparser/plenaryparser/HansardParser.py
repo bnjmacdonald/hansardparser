@@ -24,10 +24,10 @@ import time
 from typing import Union, Optional, List
 from bs4 import Tag
 
-from hansardparser.plenaryparser.models.Sitting import Sitting
-from hansardparser.plenaryparser.models.Entry import Entry
-from hansardparser.plenaryparser import utils
-from hansardparser.plenaryparser.convert_hansard import convert_contents
+from models.Sitting import Sitting
+from models.Entry import Entry
+import utils
+from convert_hansard import convert_contents
 
 
 class HansardParser(object):

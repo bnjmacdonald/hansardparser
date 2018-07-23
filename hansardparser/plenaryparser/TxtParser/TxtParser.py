@@ -17,14 +17,12 @@ import pandas as pd
 from bs4 import Tag
 from unicodedata import normalize
 
-from hansardparser.plenaryparser import utils
-from hansardparser.plenaryparser.models.Entry import Entry
-from hansardparser.plenaryparser.models.Sitting import Sitting
-from hansardparser.plenaryparser.HansardParser import HansardParser
-from hansardparser.plenaryparser.TxtParser.LineLabeler import RuleLineLabeler, SupervisedLineLabeler
-from hansardparser.plenaryparser.TxtParser.SpeakerParser import RuleSpeakerParser, SupervisedSpeakerParser
-
-from hansardparser import settings
+import utils
+from models.Entry import Entry
+from models.Sitting import Sitting
+from HansardParser import HansardParser
+from TxtParser.LineLabeler import RuleLineLabeler, SupervisedLineLabeler
+from TxtParser.SpeakerParser import RuleSpeakerParser, SupervisedSpeakerParser
 
 
 ACCEPTABLE_LINE_LABELERS = ['supervised', 'rule']
@@ -41,29 +39,10 @@ class TxtParser(HansardParser):
             trained classifier to predict the line label. If 'rule', uses rules
             (regexes and boolean tests) to determine the line label.
 
-        line_predict_kws: dict = None. Dict of keyword arguments to pass to
-            `predict_from_strings`. Only used if line_labeler == 'supervised'.
-            Example::
-
-                {{'builder_path': 'PATH_TO_BUILDER', 'clf_path': 'PATH_TO_CLF'}}
-
-        line_label_codes: dict = None. Dict containing the mapping from a label
-            code to the string label. Only used if line_labeler == 'supervised'. 
-            Example::
-
-                {{0: 'header', 1: 'speech', 2: 'scene'}}
-
         speaker_parser: str = 'rule'. One of: {ACCEPTABLE_SPEAKER_PARSERS}. If 'supervised',
             uses a trained classifier to extract the speaker name. If 'rule', uses
             rules (regexes and boolean tests) to extract the speaker name from a
             line of text.
-        
-        speaker_predict_kws: dict = None. Dict of keyword arguments to pass to
-            `predict_from_strings` for speaker parser. Only used if
-            speaker_parser == 'supervised'.
-            Example::
-
-                {{'builder_path': 'PATH_TO_BUILDER', 'clf_path': 'PATH_TO_CLF'}}
 
         see parent class (`Hansardparser`) for additional attributes.
 
@@ -81,28 +60,15 @@ class TxtParser(HansardParser):
 
     def __init__(self,
                  line_labeler: str = 'rule',
-                 line_predict_kws: dict = None,
-                 line_label_codes: dict = None,
                  speaker_parser: str = 'rule',
-                 speaker_predict_kws: dict = None,
                  verbosity: int = 0,
                  *args, **kwargs):
         assert line_labeler in ACCEPTABLE_LINE_LABELERS, \
             f'`line_labeler` must be one of {ACCEPTABLE_LINE_LABELERS}.'
         if line_labeler == 'rule':
             LineLabeler = RuleLineLabeler(verbosity=verbosity)
-            if verbosity > 0:
-                if line_predict_kws is not None:
-                    warnings.warn('You provided `line_predict_kws`, but `line_predict_kws` '
-                        'are only used when `line_labeler="supervised"`. `line_predict_kws` '
-                        'will not be used.')
-                if line_label_codes is not None:
-                    warnings.warn('You provided `line_label_codes`, but `line_label_codes ` '
-                        'are only used when `line_labeler="supervised"`. '
-                        '`line_label_codes` will not be used.')
         elif line_labeler == 'supervised':
-            LineLabeler = SupervisedLineLabeler(predict_kws=line_predict_kws,
-                label_codes=line_label_codes, verbosity=verbosity)
+            LineLabeler = SupervisedLineLabeler(verbosity=verbosity)
         else:
             raise NotImplementedError
         assert speaker_parser in ACCEPTABLE_SPEAKER_PARSERS, \
@@ -110,8 +76,7 @@ class TxtParser(HansardParser):
         if speaker_parser == 'rule':
             SpeakerParser = RuleSpeakerParser(verbosity=verbosity)
         elif speaker_parser == 'supervised':
-            SpeakerParser = SupervisedSpeakerParser(predict_kws=speaker_predict_kws,
-                verbosity=verbosity)
+            SpeakerParser = SupervisedSpeakerParser(verbosity=verbosity)
         else:
             raise NotImplementedError
         kwargs['LineLabeler'] = LineLabeler

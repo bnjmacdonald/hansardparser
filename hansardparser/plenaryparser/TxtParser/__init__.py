@@ -1,1 +1,1 @@
-from hansardparser.plenaryparser.TxtParser.TxtParser import TxtParser
+from TxtParser.TxtParser import TxtParser
