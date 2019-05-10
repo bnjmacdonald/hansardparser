@@ -33,32 +33,6 @@ except:
     warnings.warn('Corpora/words not found. Need to run nltk.download().', RuntimeWarning)
 
 
-def get_file_paths(input_dirs, verbose=0):
-    file_paths = []
-    if isinstance(input_dirs, str):
-        input_dirs = [input_dirs]
-    for input_dir in input_dirs:
-        if not os.path.isdir(input_dir):
-            raise RuntimeError('Input must be valid directory. Please enter choice again.')
-        for subdir, dirs, files in os.walk(input_dir):
-            for f in files:
-                # print(f)
-                if f.startswith('.'):
-                    if verbose > 1:
-                        print('Passing over hidden file: %s' % f)
-                    continue
-                if '.pdf' not in f:
-                    if verbose > 1:
-                        print('Passing over %s' % f)
-                    continue
-                file_paths.append(os.path.join(subdir, f))
-        # else:
-        #     for f in os.listdir(input_dir):
-        #         if len(f) > 3 and f[:4] in years:
-        #             file_paths.append('/'.join([input_dir, f]))
-    return file_paths
-
-
 def date_search(s):
     """searches for date in string (s). Returns re.search object if found.
     Returns None otherwise.
