@@ -3,7 +3,7 @@
 
 import unittest
 import datetime
-from hansardparser.plenaryparser import utils
+import utils
 
 class UtilsTests(unittest.TestCase):
     """tests for other methods in `utils` module.

@@ -57,7 +57,7 @@ def main(filepath: str, outpath: str, by_sitting: bool = False, seed: int = None
             np.savetxt(os.path.join(outpath, f'{split_name}.txt'), these_lines, fmt='%s')
     # splits lines in csv.
     elif filetype == 'csv':
-        lines = pd.read_csv(filepath)
+        lines = pd.read_csv(filepath, encoding='latin')
         if by_sitting:
             _ids = lines.file.unique()
         else:

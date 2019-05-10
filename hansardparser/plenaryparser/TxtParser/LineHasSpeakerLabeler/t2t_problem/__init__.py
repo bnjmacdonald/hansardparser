@@ -1,0 +1,1 @@
+from . import hansard_line_has_speaker

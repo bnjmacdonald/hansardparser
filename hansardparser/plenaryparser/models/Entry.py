@@ -72,10 +72,9 @@ class Entry(object):
         """
         if next_entry.entry_type == 'punct':
             return True
-        if self.entry_type == next_entry.entry_type or \
-            (self.entry_type and next_entry.entry_type and \
-             self.entry_type.startswith('speech_') and \
-             next_entry.entry_type.startswith('speech_')):
+        both_speeches = (self.entry_type and self.entry_type.startswith('speech_') and \
+                         next_entry.entry_type and next_entry.entry_type.startswith('speech_'))
+        if (self.entry_type == next_entry.entry_type) or both_speeches:
             if self.entry_type in ['speech', 'speech_new', 'speech_ctd']:
                 if self.speaker == next_entry.speaker:
                     return True
@@ -133,8 +132,10 @@ class Entry(object):
             next_entry.speaker_cleaned = self.speaker_cleaned
             next_entry.appointment = self.appointment
             next_entry.title = self.title
-        if self.speaker != next_entry.speaker:
-            raise RuntimeError(f'Speakers are not equal: {self.speaker} != {next_entry.speaker}.')
+        both_speeches = (self.entry_type and self.entry_type.startswith('speech_') and \
+                         next_entry.entry_type and next_entry.entry_type.startswith('speech_'))
+        if both_speeches and self.speaker != next_entry.speaker:
+            raise RuntimeError(f'Speakers are not equal: {self.speaker} != {next_entry.speaker}. {self.__dict__}, {next_entry.__dict__}')
             # speaker_len = len(self.speaker) if self.speaker else 0
             # next_speaker_len = len(next_entry.speaker) if next_entry.speaker else 0
             # if speaker_len > next_speaker_len:

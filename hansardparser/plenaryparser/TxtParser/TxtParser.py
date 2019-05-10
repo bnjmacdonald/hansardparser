@@ -1,94 +1,96 @@
 """Defines the TxtParser subclass.
 
 Parses a txt Kenya Hansard transcript into a list of Entry objects,
-which can than be converted into a dictonary or Pandas DataFrame
-using the hansard_convert.py module. Module was initially built
-based on April 11th, 2006 transcript.
+which can than be converted into a dictonary or Pandas DataFrame using
+the hansard_convert.py module.
 
-See super-class (hansard_parser.py) for notes on implementation.
+Notes:
+
+    * This implementation was inspired in part by: https://github.com/mysociety/pombola/blob/master/pombola/hansard/kenya_parser.py
 """
 
 import os
 import re
 import time
 import warnings
+import datetime
+from copy import deepcopy
 from typing import List, Union, Optional, Tuple
 import pandas as pd
-from bs4 import Tag
 from unicodedata import normalize
 
 import utils
 from models.Entry import Entry
-from models.Sitting import Sitting
-from HansardParser import HansardParser
-from TxtParser.LineLabeler import RuleLineLabeler, SupervisedLineLabeler
-from TxtParser.SpeakerParser import RuleSpeakerParser, SupervisedSpeakerParser
+from TxtParser import LineTypeLabeler, LineSpeakerSpanLabeler, LineHasSpeakerLabeler
 
+ALLOWED_EXTENSIONS = ['txt', 'pdf']
+ALLOWED_LINE_TYPE_LABELERS = ['supervised', 'rule']
+# ALLOWED_LINE_HAS_SPEAKER_LABELERS = ['supervised', 'rule']
+ALLOWED_LINE_SPEAKER_SPAN_LABELERS = ['supervised', 'hybrid', 'rule']
 
-ACCEPTABLE_LINE_LABELERS = ['supervised', 'rule']
-ACCEPTABLE_SPEAKER_PARSERS = ['supervised', 'rule']
+DEBUG = False
 
-
-class TxtParser(HansardParser):
-    f"""The TxtParser class parses Hansard txt files into a structured array of
-    speeches.
+class TxtParser(object):
+    f"""The TxtParser class parses Hansard txt or pdf files into a structured
+    array of speeches.
 
     Attributes:
 
-        line_labeler: str = 'rule'. One of: {ACCEPTABLE_LINE_LABELERS}. If 'supervised', uses a
+        line_labeler: str = 'rule'. One of: {ALLOWED_LINE_TYPE_LABELERS}. If 'supervised', uses a
             trained classifier to predict the line label. If 'rule', uses rules
             (regexes and boolean tests) to determine the line label.
 
-        speaker_parser: str = 'rule'. One of: {ACCEPTABLE_SPEAKER_PARSERS}. If 'supervised',
+        speaker_parser: str = 'rule'. One of: {ALLOWED_LINE_SPEAKER_SPAN_LABELERS}. If 'supervised',
             uses a trained classifier to extract the speaker name. If 'rule', uses
             rules (regexes and boolean tests) to extract the speaker name from a
             line of text.
 
-        see parent class (`Hansardparser`) for additional attributes.
-
     Usage::
 
-        >>> text = # ...load an unparsed Hansard text file.
+        >>> fname = # path to a txt or pdf file containing a hansard transcript.
         >>> parser = TxtParser(verbosity=1)
-        >>> results = parser.parse_hansards(text, to_format=None)
-
-    Todos:
-
-        TODO: have a clearer separation of the use of `text` vs. `lines` to refer
-            to either a string or list of strings.
+        >>> results = parser.parse_hansards(fname)
     """
 
     def __init__(self,
-                 line_labeler: str = 'rule',
-                 speaker_parser: str = 'rule',
-                 verbosity: int = 0,
-                 *args, **kwargs):
-        assert line_labeler in ACCEPTABLE_LINE_LABELERS, \
-            f'`line_labeler` must be one of {ACCEPTABLE_LINE_LABELERS}.'
-        if line_labeler == 'rule':
-            LineLabeler = RuleLineLabeler(verbosity=verbosity)
-        elif line_labeler == 'supervised':
-            LineLabeler = SupervisedLineLabeler(verbosity=verbosity)
+                 line_type_labeler: str = 'rule',
+                 line_speaker_span_labeler: str = 'rule',
+                 verbosity: int = 0):
+        assert line_type_labeler in ALLOWED_LINE_TYPE_LABELERS, \
+            f'`line_type_labeler` must be one of {ALLOWED_LINE_TYPE_LABELERS}.'
+        # initializes line type labeler.
+        if line_type_labeler == 'rule':
+            line_type_labeler = LineTypeLabeler.Rule(verbosity=verbosity)
+        elif line_type_labeler == 'supervised':
+            line_type_labeler = LineTypeLabeler.Supervised(verbosity=verbosity)
         else:
             raise NotImplementedError
-        assert speaker_parser in ACCEPTABLE_SPEAKER_PARSERS, \
-            f'`speaker_parser` must be one of {ACCEPTABLE_SPEAKER_PARSERS}.'
-        if speaker_parser == 'rule':
-            SpeakerParser = RuleSpeakerParser(verbosity=verbosity)
-        elif speaker_parser == 'supervised':
-            SpeakerParser = SupervisedSpeakerParser(verbosity=verbosity)
+        # initializes line speaker span labeler
+        assert line_speaker_span_labeler in ALLOWED_LINE_SPEAKER_SPAN_LABELERS, \
+            f'`line_labeler` must be one of {ALLOWED_LINE_SPEAKER_SPAN_LABELERS}.'
+        if line_speaker_span_labeler == 'rule':
+            line_speaker_span_labeler = LineSpeakerSpanLabeler.Rule(verbosity=verbosity)
+        elif line_speaker_span_labeler == 'supervised':
+            line_speaker_span_labeler = LineSpeakerSpanLabeler.Supervised(verbosity=verbosity)
+        elif line_speaker_span_labeler == 'hybrid':
+            line_speaker_span_labeler = LineHasSpeakerLabeler.Supervised(verbosity=verbosity)
         else:
             raise NotImplementedError
-        kwargs['LineLabeler'] = LineLabeler
-        kwargs['SpeakerParser'] = SpeakerParser
-        kwargs['verbosity'] = verbosity
-        HansardParser.__init__(self, *args, **kwargs)
+        self.line_type_labeler = line_type_labeler
+        self.line_speaker_span_labeler = line_speaker_span_labeler
+        self.verbosity = verbosity
+        self.soup = None
+        self._sitting_texts = None
+        self._unmerged_parsed_transcripts = None
+        self._line_type4_preds = None
+        self._line_speaker_span_preds = None
 
 
     def parse_hansards(self,
-                       text: str,
-                       merge: bool = True,
-                       to_format: str = 'df-long') -> List[Tuple[Sitting, Union[list, pd.DataFrame]]]:
+                       filepath_or_buffer: str,
+                       start_line: int = 0,
+                       end_line: int = None,
+                       filetype: str = None) -> List[Tuple[dict, Union[list, pd.DataFrame]]]:
         """parses one or more Hansard transcripts contained in `text`.
 
         A single Hansard transcript contains all speeches and parliamentary business
@@ -103,42 +105,63 @@ class TxtParser(HansardParser):
                 been called. Setting this to False is useful for debugging purposes,
                 so that you can see each Entry before merging.
 
-            to_format: str. Converts parsed transcripts to a pd.DataFrame, if
-                desired. See `self._convert_contents`. If None, contents are
-                not converted at all (i.e. they are left as a list of Entry
-                objects).
-
         Returns:
 
-            results: List[Tuple[Sitting, Union[list, pd.DataFrame]]]. List of tuples,
+            results: List[Tuple[dict, Union[list, pd.DataFrame]]]. List of tuples,
                 where each tuple contains:
 
-                metadata: Sitting. contains metadata on the parsed Hansard
+                metadata: dict. contains metadata on the parsed Hansard
                     transcript.
 
-                entries: Union[List[Entry], pd.DataFrame]. List of entries
-                    representing a single Sitting. If `to_format == None`, then
-                    this is a list of Entry objects. If `to_format != None`,
-                    then this is in the format returned by `self._convert_contents`.
+                entries: List[dict]. List of entries representing a single
+                    sitting.
         """
-        results = []
         time0 = time.time()
+        try:
+            if isinstance(filepath_or_buffer, str):
+                if self.verbosity > 0:
+                    print(f'Parsing sitting(s) in {filepath_or_buffer}...')
+                if filetype is None:
+                    filetype = utils.get_filetype(filepath_or_buffer)
+                f = open(filepath_or_buffer, 'rb')
+            else:
+                f = filepath_or_buffer
+            assert filetype in ALLOWED_EXTENSIONS
+            if filetype == 'txt':
+                text = f.read()
+            elif filetype == 'pdf':
+                text = utils.pdf2str(f)
+            if start_line > 0:
+                text = text.split('\n')
+                if end_line is None:
+                    text = '\n'.join(text[start_line:])
+                else:
+                    text = '\n'.join(text[start_line:end_line])
+        finally:
+            f.close()
+        text = utils.normalize_text(text)
         sitting_texts = self._split_sittings(text)
+        self._sitting_texts = sitting_texts
         if self.verbosity > 0:
             print(f'Found {len(sitting_texts)} sittings in file.')
+        results = []
         for sitting_text in sitting_texts:
+            if DEBUG:
+                sitting_text = sitting_text[:1500]
             lines = self._preprocess_text(sitting_text)
-            metadata = self._extract_metadata(lines)
+            metadata = self._extract_metadata(sitting_text)
             entries = self._parse_entries(lines)
-            if merge:
-                entries = self._merge_entries(entries)
-            entries = self._clean_entries(entries)
-            if to_format is not None:
-                entries = self._convert_contents(entries, to_format=to_format)
-            results.append((metadata, entries))
+            # constructs dict of unmerged parsed transcript.
+            if self._unmerged_parsed_transcripts is None:
+                self._unmerged_parsed_transcripts = []
+            self._unmerged_parsed_transcripts.append({"meta": deepcopy(metadata), "entries": [deepcopy(entry.__dict__) for entry in entries]})
+            entries = self._merge_entries(entries)
+            entries = self._postprocess_entries(entries)
+            entries = [{k:v for k, v in sorted(entry.__dict__.items())} for entry in entries]
+            results.append({"meta": metadata, "entries": entries})
         time1 = time.time()
         if self.verbosity > 0:
-            print(f'Processed {len(results)} files in {time1 - time0:.2f} seconds.')
+            print(f'Processed {len(results)} transcripts in {time1 - time0:.2f} seconds.')
         return results
 
 
@@ -157,15 +180,14 @@ class TxtParser(HansardParser):
         Todos:
 
             TODO: write tests for this method. The whole thing is very kludgy.
+            TODO: remove hard-coded compendium meta at top and bottom of file.
         """
-        # out = text.decode('utf-8')  # windows-1252
-        # TODO: this method should not return List of soups. Just return a single
-        # soup. Make a decision about how this parser should be used.
-        # TODO: remove hard-coded compendium meta at top and bottom of file.
         text = normalize('NFKD', text)  # .encode('ASCII', 'ignore')
+        # KLUDGE: replaces '|' with '/'. I think I do this to avoid issues with
+        # regexes, but cannot recall with 100% certainty.
         if '|' in text:
             text = text.replace('|', '/')
-            if self.verbosity > 0:
+            if self.verbosity > 1:
                 warnings.warn('Found "|" in this document. Replaced with "/".', RuntimeWarning)
         # split single text file by sitting.
         sitting_end_regex = re.compile(r'[\n\r](<i>)?the house rose at .{1,50}[\n\r]', re.IGNORECASE|re.DOTALL)
@@ -201,27 +223,6 @@ class TxtParser(HansardParser):
             line = line.strip()
             if len(line) > 0:
                 new_text.append(line)
-        # splits tags with lengthy whitespace in between text.
-        # for tag in self.soup.descendants:
-        #     tag_text = tag.text.strip() if isinstance(tag, Tag) else tag.string.strip()
-        #     if re.search(r'\s{4,}', tag_text):
-        #         if self.verbosity > 2:
-        #             print(f'splitting tag: {tag}')
-        #         split_text = re.split(r'\s{4,}', tag_text)
-        #         current_tag = tag
-        #         for i, text in enumerate(split_text):
-        #             if isinstance(tag, Tag):
-        #                 new_tag = self.soup.new_tag(current_tag.name, **current_tag.attrs)
-        #                 new_tag.string = text
-        #             else:
-        #                 new_tag = NavigableString(text)
-        #             # if first in split, replace existing tag. Else insert after.
-        #             if i == 0:
-        #                 current_tag.replace_with(new_tag)
-        #             else:
-        #                 current_tag.insert_after(new_tag)
-        #             current_tag = new_tag
-        # num_descendants_after = sum([1 for d in self.soup.descendants])
         num_lines_after = len(new_text)
         if self.verbosity > 1:
             print(f'Number of lines before preprocessing: {num_lines}')
@@ -229,88 +230,130 @@ class TxtParser(HansardParser):
         return new_text
 
 
-
-    def _extract_metadata(self, lines: List[str], metadata: Sitting = None, max_check: int = 50) -> Sitting:
+    def _extract_metadata(self, text: str) -> dict:
         """extracts metadata from the initial lines in contents.
-
-        Todos:
-
-            TODO: revise extract metadata.
-                lines like "Wednesday,      26th September  1335-1380" should not be a date.
-                revise `is_page_date`.
         """
-        if metadata is None:
-            metadata = Sitting()
-        i = 0
-        lines_to_rm = []
-        max_check = min(max_check, len(lines))
-        while i < max_check and metadata.is_incomplete():
-            line = lines[i]
-            added = self._add_to_meta(line, metadata)
-            i += 1
-            if added:
-                if self.verbosity > 1:
-                    print(f'Added line to metadata: {line}')
-                    print(f'Updated metadata: {metadata}')
-                lines_to_rm.append(i)
-            elif utils.is_page_date(line) or utils.is_page_heading(line) or utils.is_page_number(line):
-                lines_to_rm.append(i)
-        for i in sorted(lines_to_rm)[::-1]:
-            lines.pop(i)
-        # combines date and time.
-        if metadata.date is not None:
-            if metadata.time is not None:
-                regex = re.search(r'(?P<hour>\d{1,2})\.(?P<min>\d{1,2})', metadata.time)
-                metadata.date = metadata.date.replace(hour=int(regex.group('hour')), minute=int(regex.group('min')))
-            del metadata.time
-        if self.verbosity > 0 and metadata.date is None:
-            warnings.warn('No date found in sitting.', RuntimeWarning)
-        return metadata
+        date = self._extract_sitting_date(text)
+        times = self._extract_sitting_time(text)
+        if self.verbosity > 0:
+            if date is None:
+                warnings.warn('Date not found in transcript.')
+            if 'start' not in times:
+                warnings.warn('Start time not found in transcript.')
+            if 'end' not in times:
+                warnings.warn('Start time not found in transcript.')
+        start_date = date
+        if date is not None and times['start'] is not None:
+            start_date = start_date.replace(hour=times['start'][0], minute=times['start'][1])
+        end_date = None
+        if date is not None and times['end'] is not None:
+            end_date = date.replace(hour=times['end'][0], minute=times['end'][1])
+        return {'start_date': start_date, 'end_date': end_date}
 
 
-    def _add_to_meta(self, line: str, metadata: Sitting) -> bool:
-        """Attempts to add the contents of a line to the transcript metadata.
-
-        Arguments:
-
-            line: str. a string containing text to be added to the metadata.
-
-            metadata: Sitting. A Sitting object as defined in sitting_class.py.
-
-        Returns:
-
-            bool. returns 0 if line is None or if no update is made, otherwise
-                returns 1 once the metadata Sitting object has been updated based
-                on line.
+    def _extract_sitting_time(self, text: str) -> dict:
+        """extracts the sitting start and end times from a text transcript.
+        
+        Time formats:
+            The House met at 2.30 p.m.
+            The House rose at 8.30 p.m.
+            ...
         """
-        if line is None or len(line) == 0:
-            return False
-        page_number_test = line.isdigit() and len(line) < 5
-        if page_number_test:
-            if metadata.start_page is None:
-                metadata.start_page = line
-                return True
-            else:
-                return False
-        if utils.is_transcript_heading(line):
-            if metadata.heading is None:
-                metadata.heading = utils.get_transcript_heading(line)
-            else:
-                metadata.heading += ' ' + utils.get_transcript_heading(line)
-            return True
-        if utils.is_str_date(line):
-            metadata.date = utils.convert_str_to_date(line)
-            return True
-        time_reg = re.compile(r'The House (?P<action>met|rose) at ?(?P<time>\d+\.\d+.* [ap].m.*)')
-        if time_reg.search(line):
-            result = time_reg.search(line)
-            metadata.time = result.group('time').strip()
-            return True
-        return False
+        start_regex = re.compile(r'the\s*house\s*(?P<action>met)\s*at\s*(?P<hour>\d{1,2})[\.:;](?P<minute>\d{1,2})\s*(?P<ampm>[ap]\.?m\.?)', flags=re.IGNORECASE)
+        end_regex = re.compile(r'the\s*house\s*(?P<action>rose)\s*at\s*(?P<hour>\d{1,2})[\.:;](?P<minute>\d{1,2})\s*(?P<ampm>[ap]\.?m\.?)', flags=re.IGNORECASE)
+        # searches for start time in first n characters of the sitting text.
+        n_chars = 100
+        start_time = None
+        while start_time is None and n_chars < 1500:
+            this_text = re.sub(r'[\n\r]+', '', text[:n_chars])
+            this_text = re.sub(r'\s+', ' ', this_text.strip())
+            regex_res = start_regex.search(this_text)
+            if regex_res is not None:
+                start_time = regex_res.groupdict()
+                assert start_time['action'].lower() == 'met'
+                start_time['hour'] = int(start_time['hour'])
+                start_time['minute'] = int(start_time['minute'])
+                if start_time['ampm'].startswith('p') and start_time['hour'] != 12:
+                    start_time['hour'] += 12
+                elif start_time['ampm'].startswith('a') and start_time['ampm'] == 12:
+                    # e.g. 12:30am -> 0:30
+                    start_time['hour'] = 0
+                start_time = (start_time['hour'], start_time['minute'])
+                assert start_time[0] < 24, f'Start time hour is greater than 23 (start time hour: {start_time[0]}).'
+                assert start_time[1] < 60, f'Start time minute is greater than 59 (start time minutee: {start_time[1]}).'
+            n_chars += 100
+        # searches for end time in last n characters of the sitting text.
+        n_chars = 100
+        end_time = None
+        while end_time is None and n_chars < 1500:
+            this_text = re.sub(r'[\n\r]+', '', text[-n_chars:])
+            this_text = re.sub(r'\s+', ' ', this_text.strip())
+            regex_res = end_regex.search(this_text)
+            if regex_res is not None:
+                end_time = regex_res.groupdict()
+                assert end_time['action'].lower() == 'rose'
+                end_time['hour'] = int(end_time['hour'])
+                end_time['minute'] = int(end_time['minute'])
+                if end_time['ampm'].startswith('p') and end_time['hour'] != 12:
+                    end_time['hour'] += 12
+                elif end_time['ampm'].startswith('a') and end_time['ampm'] == 12:
+                    # e.g. 12:30am -> 0:30
+                    end_time['hour'] = 0
+                end_time = (end_time['hour'], end_time['minute'])
+                assert end_time[0] < 24, f'End time hour is greater than 23 (end time hour: {end_time[0]}).'
+                assert end_time[1] < 60, f'End time minute is greater than 59 (end time minutee: {end_time[1]}).'
+            n_chars += 100
+        return {'start': start_time, 'end': end_time}
+
+
+    def _extract_sitting_date(self, text: str) -> datetime.datetime:
+        """extracts the sitting date from a text transcript.
+
+        Date formats:
+            WWWW, DDth MMMM, YYYY ("Thursday, 29th November, 2001")
+            WWWW, MMMM DDth, YYYY ("Thursday, November 29th, 2001")
+            MMMM DDth, YYYY ("October 10th, 2005")
+            DDth MMMM, YYYY ("10th October, 2005")
+        """
+        # date regexes.
+        month2num = {'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5,
+            'June': 6, 'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12}
+        month_abbr2num = {'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+            'Jul': 7, 'Aug': 8, 'Sept': 9, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12}
+        month2num.update(month_abbr2num)
+        days_of_week = 'Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
+        months = '|'.join(month2num.keys())
+        days = '|'.join([str(x) for x in range(1, 32)])
+        day_suffixes = 'th|st|nd|rd'
+        years = '|'.join([str(x) for x in range(1900, datetime.datetime.today().year)])
+        flags = re.DOTALL|re.IGNORECASE
+        tests = [
+            re.compile(rf'(?P<day_of_week>{days_of_week})[\s,]*(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<month>{months})[\s,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<day_of_week>{days_of_week})[\s,]*(?P<month>{months})[\s,]*(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<month>{months})[\s,]*(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<month>{months})[\s,]*(?P<year>{years})', flags=flags),
+        ]
+        # searches for date in first n characters of the sitting text.
+        n_chars = 100
+        date = None
+        while date is None and n_chars < 1500:
+            tests_temp = tests.copy()
+            this_text = re.sub(r'[\n\r]+', '', text[:n_chars])
+            this_text = re.sub(r'\s+', ' ', this_text.strip())
+            while date is None and len(tests_temp) > 0:
+                regex = tests_temp.pop(0)
+                regex_res = regex.search(this_text)
+                if regex_res is not None:
+                    year = int(regex_res.groupdict()['year'])
+                    month_int = month2num[regex_res.groupdict()['month']]
+                    day = int(regex_res.groupdict()['day'])
+                    date = datetime.datetime(year, month_int, day)
+            n_chars += 100
+        return date
 
 
     def _parse_entries(self, lines: List[str]) -> List[Entry]:
-        """Parses a Hansard Sitting transcript into a list of 'entries'.
+        """Parses a Hansard sitting transcript into a list of 'entries'.
 
         Assigns a "label" to each line, extracts the speaker name from the
         beginning of each line (where applicable), and parses each speaker
@@ -321,13 +364,47 @@ class TxtParser(HansardParser):
             contents_merged: List[Entry]. a processed and cleaned
                 list of Entry objects representing each entry in the transcript.
         """
-        labels = self.LineLabeler.label_lines(lines)
+        line_type_labels = self.line_type_labeler.label_lines(lines)
+        assert len(line_type_labels) == len(lines)
+        if self._line_type4_preds is None:
+            self._line_type4_preds = []
+        self._line_type4_preds.append(list(zip(lines, line_type_labels)))
         if self.verbosity > 1:
-            for i, label in enumerate(labels):
+            for i, label in enumerate(line_type_labels):
                 if label is None:
                     warnings.warn(f'Did not find label for line: "{lines[i]}"', RuntimeWarning)
-        speaker_names, parsed_speaker_names, texts = self.SpeakerParser.extract_speaker_names(lines, labels)
-        entries = self._create_entries(texts, labels, speaker_names, parsed_speaker_names)
+        # speaker_names, parsed_speaker_names, texts, speaker_span_labels = self.line_speaker_span_labeler.extract_speaker_names(lines, types=line_type_labels)
+        speaker_span_labels = self.line_speaker_span_labeler.label_speaker_spans(lines, types=line_type_labels)
+        assert len(speaker_span_labels) == len(lines)
+        speaker_names, texts = self.line_speaker_span_labeler.extract_speaker_names(lines, speaker_span_labels)
+        assert len(speaker_names) == len(lines) and len(texts) == len(lines)
+        RuleLineSpeakerSpanLabeler = LineSpeakerSpanLabeler.Rule(verbosity=self.verbosity)
+        parsed_speaker_names = RuleLineSpeakerSpanLabeler.parse_speaker_names(speaker_names)
+        assert len(parsed_speaker_names) == len(lines)
+        # overrides speaker name extraction for lines that are not speeches.
+        for i, line in enumerate(lines):
+            if line_type_labels[i] != 'speech':
+                if self.verbosity > 1 and re.search(r'[BI]', speaker_span_labels[i]):
+                    warnings.warn(f'I found a speaker name in a "{line_type_labels[i]}" line. '
+                                  f'I am overriding this by setting the speaker_name '
+                                  f'to None. Line: "{lines[i]}"', RuntimeWarning)
+                speaker_names[i] = None
+                parsed_speaker_names[i] = (None, None, None)
+                texts[i] = line
+                speaker_span_labels[i] = 'O' * len(texts[i])
+        if self._line_speaker_span_preds is None:
+            self._line_speaker_span_preds = []
+        self._line_speaker_span_preds.append(list(zip(lines, speaker_span_labels)))
+        # KLUDGE: for lines that contain only part of a speaker name that is
+        # continued on the next line, append this speaker name to the beginning
+        # of the next line.
+        for i, bio_labels in enumerate(speaker_span_labels):
+            # if line ends with a speaker name and next line starts with a speaker name...
+            if i+1 < len(lines) and bio_labels.endswith('I') and re.search(r'^[BI]', speaker_span_labels[i+1]):
+                assert len(texts[i].strip()) == 0, f'Expected text to be empty, but text = {texts[i]}'
+                speaker_names[i+1] = speaker_names[i] + ' ' + speaker_names[i+1]
+                parsed_speaker_names[i+1] = RuleLineSpeakerSpanLabeler._parse_speaker_name(speaker_names[i+1])
+        entries = self._create_entries(texts, line_type_labels, speaker_names, parsed_speaker_names)
         return entries
 
 
@@ -347,48 +424,101 @@ class TxtParser(HansardParser):
                 page_number=None, speaker_cleaned=speaker_cleaned, title=title,
                 appointment=appointment)
             entries.append(entry)
-            if self.verbosity > 1:
-                print('------------------------')
-                print(f'Line number: {i}')
-                print(f'Speaker name: {speaker_names[i]}')
-                print(f'Entry type: {labels[i]}')
-                print(f'Text: {texts[i]}')
         return entries
 
 
     def _merge_entries(self, entries: List[Entry]) -> List[Entry]:
         """merges entries as appropriate."""
+        # speech_divider: highest level line type between current line and last
+        # known speech line (header > scene > garbage > None). 
         entries_merged = []
-        prev_entry = Entry()
+        prev_entry = None
         while len(entries) > 0:
             entry = entries.pop(0)
-            if prev_entry.can_merge(entry) and len(entries_merged):
+            if entry.entry_type == 'garbage':
+                continue
+            if len(entries_merged) > 0 and prev_entry.can_merge(entry):
                 prev_entry.merge_entries(entry, self.verbosity)
                 entries_merged[-1] = prev_entry
-            else:
-                entries_merged.append(entry)
-                prev_entry = entry
+                continue
+            elif len(entries_merged) > 1 and entry.entry_type == 'speech' and prev_entry.entry_type in ['scene', 'garbage']:
+                # if current entry is a speech and previous entry is a
+                # scene or is garbage, then there is a chance that the
+                # prev entry is dividing a speech from the same person.
+                j = len(entries_merged) - 1
+                temp_prev_entry = entries_merged[j]
+                while temp_prev_entry.entry_type in ['scene', 'garbage'] and j >= 0:
+                    j -= 1
+                    temp_prev_entry = entries_merged[j]
+                if temp_prev_entry.can_merge(entry):
+                    temp_prev_entry.merge_entries(entry, self.verbosity)
+                    entries_merged[j] = temp_prev_entry
+                    continue
+            entries_merged.append(entry)
+            prev_entry = entries_merged[-1]
         return entries_merged
 
 
-    def _clean_entries(self, entries: List[Entry]) -> List[Entry]:
-        """cleans each parsed entry.
+    def _postprocess_entries(self, entries: List[Entry]) -> List[Entry]:
+        """cleans and prunes entries after they have been parsed and merged.
 
-        This method is called after the list of entries has been constructed and
-        merged.
+        This method is called after the list of entries has been
+        constructed and merged. This method is useful for cleaning up
+        small details (e.g. remove extra spacing in header words, drop
+        speech entries with no text, etc).
 
         Todos:
 
             TODO: remove html tags from text.
         """
         # cleans text.
-        entries_merged = []
-        while len(entries):
-            entry = entries.pop(0)
+        for entry in entries:
+            entry.text = utils.extract_flatworld_tags(entry.text)[0]
             entry.text = utils.clean_text(entry.text)
-            entries_merged.append(entry)
-        return entries_merged
+            if entry.entry_type in ['header', 'subheader']:
+                entry.text = utils.fix_header_words(entry.text.lower())
+                entry.text = re.sub(r'^PRAYERS?\s+(.+)$', r'\1', entry.text, flags=re.IGNORECASE|re.DOTALL)
+            # entries2.append(entry)
+        self._distribute_headers(entries)
+        # prunes list of entries. Only keeps speeches and scenes.
+        entries_pruned = []
+        while len(entries) > 0:
+            entry = entries.pop(0)
+            if entry.entry_type is not None and entry.entry_type not in ['garbage']:
+                if 'header' not in entry.entry_type and (entry.text is None or len(entry.text) == 0):
+                    continue
+                entries_pruned.append(entry)
+        return entries_pruned
 
+
+    def _distribute_headers(self, entries: List[Entry]) -> List[Entry]:
+        """Carries forward headers, subheaders, and subsubheadeers throughout the
+        entries."""
+        current_header = None
+        current_subheader = None
+        current_subsubheader = None
+        consec_headers = False
+        for entry in entries:
+            if entry.entry_type is not None and 'header' in entry.entry_type:
+                # if len(data) > 0 and data[-1][:3] != [current_header, current_subheader, current_subsubheader]:
+                #     data.append([current_header, current_subheader, current_subsubheader] + [None]*len(attributes))
+                if entry.entry_type == 'header':
+                    current_header = entry.text
+                    current_subheader = None
+                    current_subsubheader = None
+                elif entry.entry_type == 'subheader':
+                    current_subheader = entry.text
+                    current_subsubheader = None
+                elif entry.entry_type == 'subsubheader':
+                    current_subsubheader = entry.text
+                else:
+                    raise RuntimeError(f'{entry.entry_type} entry type not recognized.')
+                entry.text = None
+                assert entry.speaker is None, f'Header entry has a speaker: {entry.__dict}'
+            entry.header = current_header
+            entry.subheader = current_subheader
+            entry.subsubheadeer = current_subsubheader
+        return None
 
     # def _assign_speaker(self, entries: List[Entry]) -> List[Entry]:
     #     # assigns speaker name to 'speech_ctd'.

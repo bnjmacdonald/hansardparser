@@ -1,2 +1,0 @@
-from TxtParser.SpeakerParser.RuleSpeakerParser import RuleSpeakerParser
-from TxtParser.SpeakerParser.SupervisedSpeakerParser import SupervisedSpeakerParser
