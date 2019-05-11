@@ -1,4 +1,5 @@
 
+import os
 import re
 import requests
 import json
@@ -33,7 +34,8 @@ CONTEXT_N_LINES = config_has_speaker.CONTEXT_N_LINES
 # send request to local server, rather than cloud server.
 LOCAL = True
 PORT = 8501
-LOCAL_URL = f'http://{PROBLEM}:{PORT}/v1/models/predict_{PROBLEM}:predict'
+HOST = os.environ['HANSARD_LINE_HAS_SPEAKER_HOST'] if 'HANSARD_LINE_HAS_SPEAKER_HOST' in os.environ else PROBLEM
+LOCAL_URL = f'http://{HOST}:{PORT}/v1/models/predict_{PROBLEM}:predict'
 
 # path to vocabulary file (only used if problem.vocab_type != 'character')
 DATA_DIR = f'/Users/bmacwell/Documents/current/projects/hansardparser/data/generated/plenaryparser/t2t_data/{PROBLEM}'

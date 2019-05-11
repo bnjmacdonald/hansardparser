@@ -1,7 +1,11 @@
-# https://medium.com/bitcraft/dockerizing-a-python-3-flask-app-line-by-line-400aef1ded3a
-# networking tutorial: https://docs.docker.com/network/network-tutorial-standalone/
+# Build and run examples::
 # workon hansardparser && cd hansardparser/plenaryparser && docker build -t hansardparser/plenaryparser:latest .
-# docker run -dt --rm -p 8000:8000 --name=plenaryparser --network=hansardparser --env VERBOSITY=1 hansardparser/plenaryparser
+# docker run -dt --rm -p 8000:8000 --name=plenaryparser --network=hansardparser \
+#   --env VERBOSITY=1 \
+#   --env HANSARD_LINE_TYPE4_HOST="hansard_line_type4_char" \
+#   --env HANSARD_LINE_HAS_SPEAKER_HOST="hansard_line_has_speaker_char" \
+#   --env HANSARD_LINE_SPEAKER_SPAN_HOST="hansard_line_speaker_span_char" \
+#   hansardparser/plenaryparser
 FROM ubuntu:latest
 FROM python:3.6
 LABEL maintainer="bnjmacdonald@gmail.com"

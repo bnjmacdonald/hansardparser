@@ -1,4 +1,5 @@
 
+import os
 import json
 import requests
 import base64
@@ -28,7 +29,8 @@ BATCH_SIZE = 50
 # send request to local server, rather than cloud server.
 LOCAL = True
 PORT = 8501
-LOCAL_URL = f'http://{PROBLEM}:{PORT}/v1/models/predict_{PROBLEM}:predict'
+HOST = os.environ['HANSARD_LINE_TYPE4_HOST'] if 'HANSARD_LINE_TYPE4_HOST' in os.environ else PROBLEM
+LOCAL_URL = f'http://{HOST}:{PORT}/v1/models/predict_{PROBLEM}:predict'
 
 # path to vocabulary file (only used if problem.vocab_type != 'character')
 DATA_DIR = f'/Users/bmacwell/Documents/current/projects/hansardparser/data/generated/plenaryparser/t2t_data/{PROBLEM}'
