@@ -326,7 +326,7 @@ def extract_flatworld_tags(s: str) -> Tuple[str, List[str]]:
         ('<b>MOTIONS</b>', ['header'])
     """
     # extracts the unique Flatworld tags found.
-    inner_regex = r'[/\s]{0,3}(new[\-\s]?spe{1,2}ch|spe{1,2}ch|sub[\-\s]?heade?r|heade?r|scene?|district)[/\s]{0,3}'
+    inner_regex = r'[/\s]{0,3}(new[\-\s]?spe{1,2}ch|spe{1,2}ch|sub[\-\s]?heade?r|heade?r|scene?|district|i|b|u)[/\s]{0,3}'
     regex = re.compile(rf'<({inner_regex})>|<({inner_regex})|({inner_regex})>', flags=re.IGNORECASE)
     result = re.findall(regex, s)
     tags = set({})
