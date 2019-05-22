@@ -11,13 +11,12 @@ FROM python:3.6
 LABEL maintainer="bnjmacdonald@gmail.com"
 RUN apt-get update
 RUN apt-get install -y python3 python3-dev python3-pip nginx
-COPY . /app
-COPY config/credentials/hansardparser-1354bffbaa01.json /app/hansardparser-1354bffbaa01.json
-ENV GOOGLE_APPLICATION_CREDENTIALS="/app/hansardparser-1354bffbaa01.json"
+COPY ./requirements.txt /app/requirements.txt
 WORKDIR /app
 RUN pip install -r requirements.txt
 RUN python -m nltk.downloader words
-# ENTRYPOINT ["python"]
-# CMD ["main.py"]
+COPY . /app
+COPY ./config/credentials/hansardparser-1354bffbaa01.json /app/hansardparser-1354bffbaa01.json
+ENV GOOGLE_APPLICATION_CREDENTIALS="/app/hansardparser-1354bffbaa01.json"
 EXPOSE 8000
 CMD ["gunicorn", "-b", "0.0.0.0:8000", "main:app", "--timeout", "600"]
