@@ -1,5 +1,8 @@
 """Implements a Flask app for parsing a Hansard transcript.
 
+Run the app:
+
+    workon hansardparser && cd hansardparser/plenaryparser && python -m main
 
 Python example (via Requests)::
 
@@ -64,24 +67,22 @@ def main():
                 line_speaker_span_labeler=line_speaker_span_labeler,
                 verbosity=verbosity
             )
-            parsed_transcripts = parser.parse_hansards(
+            parsed_transcript = parser.parse_hansard(
                 filepath_or_buffer=f,
                 start_line=start_line,
                 end_line=end_line,
                 filetype=filetype
             )
-            result = []
-            for i in range(len(parsed_transcripts)):
-                d = {'parsed_transcripts': parsed_transcripts[i]}
-                if verbosity > 0:
-                    d.update({'sitting_texts': parser._sitting_texts[i],
-                              'unmerged_parsed_transcripts': parser._unmerged_parsed_transcripts[i],
-                              'line_type4_preds': parser._line_type4_preds[i],
-                              'line_speaker_span_preds': parser._line_speaker_span_preds[i]})
-                result.append(d)
+            result = {
+                'parsed_transcript': parsed_transcript,
+                'sitting_text': parser._sitting_text,
+                'unmerged_parsed_transcript': parser._unmerged_parsed_transcript,
+                'line_type4_pred': parser._line_type4_preds,
+                'line_speaker_span_pred': parser._line_speaker_span_preds
+            }
             return jsonify(result)
         except Exception:
-            logging.exception(f'Failed to parse and save transcript.')
+            logging.exception(f'Failed to parse transcript.')
             return abort(500)
     return ''
 

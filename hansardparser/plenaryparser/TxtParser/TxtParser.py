@@ -49,7 +49,7 @@ class TxtParser(object):
 
         >>> fname = # path to a txt or pdf file containing a hansard transcript.
         >>> parser = TxtParser(verbosity=1)
-        >>> results = parser.parse_hansards(fname)
+        >>> results = parser.parse_hansard(fname)
     """
 
     def __init__(self,
@@ -79,14 +79,13 @@ class TxtParser(object):
         self.line_type_labeler = line_type_labeler
         self.line_speaker_span_labeler = line_speaker_span_labeler
         self.verbosity = verbosity
-        self.soup = None
-        self._sitting_texts = None
-        self._unmerged_parsed_transcripts = None
+        self._sitting_text = None
+        self._unmerged_parsed_transcript = None
         self._line_type4_preds = None
         self._line_speaker_span_preds = None
 
 
-    def parse_hansards(self,
+    def parse_hansard(self,
                        filepath_or_buffer: str,
                        start_line: int = 0,
                        end_line: int = None,
@@ -107,10 +106,10 @@ class TxtParser(object):
 
         Returns:
 
-            results: List[Tuple[dict, Union[list, pd.DataFrame]]]. List of tuples,
-                where each tuple contains:
+            results: dict. Dict containing metadata and list of entries.
+                Keys:
 
-                metadata: dict. contains metadata on the parsed Hansard
+                meta: dict. contains metadata on the parsed Hansard
                     transcript.
 
                 entries: List[dict]. List of entries representing a single
@@ -140,73 +139,25 @@ class TxtParser(object):
         finally:
             f.close()
         text = utils.normalize_text(text)
-        sitting_texts = self._split_sittings(text)
-        self._sitting_texts = sitting_texts
-        if self.verbosity > 0:
-            print(f'Found {len(sitting_texts)} sittings in file.')
-        results = []
-        for sitting_text in sitting_texts:
-            if DEBUG:
-                sitting_text = sitting_text[:1500]
-            lines = self._preprocess_text(sitting_text)
-            metadata = self._extract_metadata(sitting_text)
+        if DEBUG:
+            text = text[:1500]
+        self._sitting_text = text
+        lines = self._preprocess_text(text)
+        metadata = None
+        entries = None
+        if len(lines) > 0:
+            metadata = self._extract_metadata(text)
             entries = self._parse_entries(lines)
             # constructs dict of unmerged parsed transcript.
-            if self._unmerged_parsed_transcripts is None:
-                self._unmerged_parsed_transcripts = []
-            self._unmerged_parsed_transcripts.append({"meta": deepcopy(metadata), "entries": [deepcopy(entry.__dict__) for entry in entries]})
+            self._unmerged_parsed_transcript = {"meta": deepcopy(metadata), "entries": [deepcopy(entry.__dict__) for entry in entries]}
             entries = self._merge_entries(entries)
             entries = self._postprocess_entries(entries)
             entries = [{k:v for k, v in sorted(entry.__dict__.items())} for entry in entries]
-            results.append({"meta": metadata, "entries": entries})
+        result = {"meta": metadata, "entries": entries}
         time1 = time.time()
         if self.verbosity > 0:
-            print(f'Processed {len(results)} transcripts in {time1 - time0:.2f} seconds.')
-        return results
-
-
-    def _split_sittings(self, text: str) -> List[str]:
-        """splits a string of text containing multiple parliamentary sittings
-        into a list of strings where each element represents one sitting.
-
-        Arguments:
-
-            text: str.
-
-        Returns:
-
-            sitting_text: List[str].
-        
-        Todos:
-
-            TODO: write tests for this method. The whole thing is very kludgy.
-            TODO: remove hard-coded compendium meta at top and bottom of file.
-        """
-        text = normalize('NFKD', text)  # .encode('ASCII', 'ignore')
-        # KLUDGE: replaces '|' with '/'. I think I do this to avoid issues with
-        # regexes, but cannot recall with 100% certainty.
-        if '|' in text:
-            text = text.replace('|', '/')
-            if self.verbosity > 1:
-                warnings.warn('Found "|" in this document. Replaced with "/".', RuntimeWarning)
-        # split single text file by sitting.
-        sitting_end_regex = re.compile(r'[\n\r](<i>)?the house rose at .{1,50}[\n\r]', re.IGNORECASE|re.DOTALL)
-        split_text = sitting_end_regex.split(text)
-        new_split_text = []
-        for i in range(0, len(split_text), 2):
-            try:
-                assert len(split_text[i+1]) < 100, 'this text is supposed to be less than 100 characters.'
-                new_split_text.append(split_text[i] + '\n' + split_text[i+1])
-            except (IndexError, TypeError):
-                # for split_text[-1]
-                new_split_text.append(split_text[i])
-        assert new_split_text[-1] == split_text[-1]
-        sitting_texts = []
-        for i, text in enumerate(new_split_text):
-            # soup = BeautifulSoup(text, 'html.parser')
-            if len(text) > 0:  # NOTE: might not be necessary?
-                sitting_texts.append(text)
-        return sitting_texts
+            print(f'Processed transcript in {time1 - time0:.2f} seconds.')
+        return result
 
 
     def _preprocess_text(self, text: str) -> List[str]:
@@ -221,6 +172,7 @@ class TxtParser(object):
         new_text = []
         for line in text:
             line = line.strip()
+            line, _ = utils.extract_flatworld_tags(line)
             if len(line) > 0:
                 new_text.append(line)
         num_lines_after = len(new_text)
@@ -325,13 +277,13 @@ class TxtParser(object):
         months = '|'.join(month2num.keys())
         days = '|'.join([str(x) for x in range(1, 32)])
         day_suffixes = 'th|st|nd|rd'
-        years = '|'.join([str(x) for x in range(1900, datetime.datetime.today().year)])
+        years = '|'.join([str(x) for x in range(1900, datetime.datetime.today().year+1)])
         flags = re.DOTALL|re.IGNORECASE
         tests = [
-            re.compile(rf'(?P<day_of_week>{days_of_week})[\s,]*(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<month>{months})[\s,]*(?P<year>{years})', flags=flags),
-            re.compile(rf'(?P<day_of_week>{days_of_week})[\s,]*(?P<month>{months})[\s,]*(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<year>{years})', flags=flags),
-            re.compile(rf'(?P<month>{months})[\s,]*(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<year>{years})', flags=flags),
-            re.compile(rf'(?P<day>{days})[\s,]*({day_suffixes})?[\s,]*(?P<month>{months})[\s,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<day_of_week>{days_of_week})[\s,]*(?P<day>{days})[\s\.,]*({day_suffixes})?[\s\.,]*(?P<month>{months})[\s,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<day_of_week>{days_of_week})[\s,]*(?P<month>{months})[\s,]*(?P<day>{days})[\s\.,]*({day_suffixes})?[\s\.,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<month>{months})[\s,]*(?P<day>{days})[\s\.,]*({day_suffixes})?[\s\.,]*(?P<year>{years})', flags=flags),
+            re.compile(rf'(?P<day>{days})[\s\.,]*({day_suffixes})?[\s\.,]*(?P<month>{months})[\s,]*(?P<year>{years})', flags=flags),
         ]
         # searches for date in first n characters of the sitting text.
         n_chars = 100
@@ -366,9 +318,7 @@ class TxtParser(object):
         """
         line_type_labels = self.line_type_labeler.label_lines(lines)
         assert len(line_type_labels) == len(lines)
-        if self._line_type4_preds is None:
-            self._line_type4_preds = []
-        self._line_type4_preds.append(list(zip(lines, line_type_labels)))
+        self._line_type4_preds = list(zip(lines, line_type_labels))
         if self.verbosity > 1:
             for i, label in enumerate(line_type_labels):
                 if label is None:
@@ -392,9 +342,7 @@ class TxtParser(object):
                 parsed_speaker_names[i] = (None, None, None)
                 texts[i] = line
                 speaker_span_labels[i] = 'O' * len(texts[i])
-        if self._line_speaker_span_preds is None:
-            self._line_speaker_span_preds = []
-        self._line_speaker_span_preds.append(list(zip(lines, speaker_span_labels)))
+        self._line_speaker_span_preds = list(zip(lines, speaker_span_labels))
         # KLUDGE: for lines that contain only part of a speaker name that is
         # continued on the next line, append this speaker name to the beginning
         # of the next line.
@@ -473,7 +421,6 @@ class TxtParser(object):
         """
         # cleans text.
         for entry in entries:
-            entry.text = utils.extract_flatworld_tags(entry.text)[0]
             entry.text = utils.clean_text(entry.text)
             if entry.entry_type in ['header', 'subheader']:
                 entry.text = utils.fix_header_words(entry.text.lower())
@@ -517,7 +464,7 @@ class TxtParser(object):
                 assert entry.speaker is None, f'Header entry has a speaker: {entry.__dict}'
             entry.header = current_header
             entry.subheader = current_subheader
-            entry.subsubheadeer = current_subsubheader
+            entry.subsubheader = current_subsubheader
         return None
 
     # def _assign_speaker(self, entries: List[Entry]) -> List[Entry]:
