@@ -28,6 +28,7 @@ PROBLEM_CLASSES = {'hansard_line_speaker_span': HansardLineSpeakerSpan,
 
 # number of instances to pass for online prediction per batch.
 BATCH_SIZE = 10
+MAX_LENGTH = 2048  # KLUDGE: how could I easily retrieve this from the exported model?
 RM_FLATWORLD_TAGS = config_speaker_span.RM_FLATWORLD_TAGS
 CONTEXT_N_LINES = config_speaker_span.CONTEXT_N_LINES
 
@@ -129,7 +130,15 @@ class Supervised(object):
         contexts = self._get_line_context(lines, n=CONTEXT_N_LINES)
         instances = []
         for i, line in enumerate(lines):
-            instances.append({'inputs': line, 'context': contexts[i]})
+            context = contexts[i]
+            if MAX_LENGTH > 0:
+                if len(line) > MAX_LENGTH:
+                    line = line[:MAX_LENGTH]
+                    context = ''
+                elif (len(line) + len(context)) > MAX_LENGTH:
+                    context = context[:MAX_LENGTH-len(line)]
+                assert (len(line) + len(context)) <= MAX_LENGTH
+            instances.append({'inputs': line, 'context': context})
         if self.verbosity > 1:
             raw_instances = instances.copy()
         if LABEL_SPEECHES_ONLY:
@@ -274,7 +283,7 @@ class Supervised(object):
         """retrieves context for each line.
         """
         contexts = []
-        for i, line in enumerate(lines):
+        for i in range(len(lines)):
             prev_text = '\n'.join(lines[i-n:i])
             next_text = '\n'.join(lines[i+1:i+1+n])
             # line['prev_context'] = prev_line_text

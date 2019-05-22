@@ -28,6 +28,7 @@ PROBLEM_CLASSES = {'hansard_line_has_speaker': HansardLineHasSpeaker,
 
 # number of instances to pass for online prediction per batch.
 BATCH_SIZE = 50
+MAX_LENGTH = 2048  # KLUDGE: how could I easily retrieve this from the exported model?
 RM_FLATWORLD_TAGS = config_has_speaker.RM_FLATWORLD_TAGS
 CONTEXT_N_LINES = config_has_speaker.CONTEXT_N_LINES
 
@@ -104,11 +105,11 @@ class Supervised(object):
         for i, pred in enumerate(pred_labels):
             if pred == 1:
                 pred_bio = self.RuleLineSpeakerSpanLabeler._get_prediction(line_texts[i])
-                # KLUDGE: if line contains an A-z character and no B or I tags are
+                # KLUDGE: if line contains an A-z character, no B or I tags are
                 # found despite that the line is predicted to have a speaker,
+                # and line is less than 200 characters in length,
                 # then assign the whole line as a speaker.
-                if bool(re.search(r'[A-z]', line_texts[i])) and not bool(re.search(r'[BI]', pred_bio)):
-                    assert len(pred_bio) < 150, f'Expected a line with len < 150, but line length is {len(pred_bio)}. Line: {line_texts[i]}'
+                if len(line_texts[i]) < 200 and bool(re.search(r'[A-z]', line_texts[i])) and not bool(re.search(r'[BI]', pred_bio)):
                     if self.verbosity > 1:
                         warnings.warn(f'Line is predicted to have a speaker, '
                                       f'but I failed to extract a speaker. I '
@@ -154,7 +155,15 @@ class Supervised(object):
         contexts = self._get_line_context(lines, n=CONTEXT_N_LINES)
         instances = []
         for i, line in enumerate(lines):
-            instances.append({'inputs': line, 'context': contexts[i]})
+            context = contexts[i]
+            if MAX_LENGTH > 0:
+                if len(line) > MAX_LENGTH:
+                    line = line[:MAX_LENGTH]
+                    context = ''
+                elif (len(line) + len(context)) > MAX_LENGTH:
+                    context = context[:MAX_LENGTH-len(line)]
+                assert (len(line) + len(context)) <= MAX_LENGTH
+            instances.append({'inputs': line, 'context': context})
         if self.verbosity > 1:
             raw_instances = instances.copy()
         if LABEL_SPEECHES_ONLY:
@@ -289,7 +298,7 @@ class Supervised(object):
         """retrieves context for each line.
         """
         contexts = []
-        for i, line in enumerate(lines):
+        for i in range(len(lines)):
             prev_text = '\n'.join(lines[i-n:i])
             next_text = '\n'.join(lines[i+1:i+1+n])
             # line['prev_context'] = prev_line_text

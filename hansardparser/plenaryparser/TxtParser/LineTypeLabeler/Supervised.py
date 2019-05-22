@@ -29,6 +29,7 @@ BATCH_SIZE = 50
 # send request to local server, rather than cloud server.
 LOCAL = True
 PORT = 8501
+MAX_LENGTH = 2048  # KLUDGE: how could I easily retrieve this from the exported model?
 HOST = os.environ['HANSARD_LINE_TYPE4_HOST'] if 'HANSARD_LINE_TYPE4_HOST' in os.environ else PROBLEM
 LOCAL_URL = f'http://{HOST}:{PORT}/v1/models/predict_{PROBLEM}:predict'
 
@@ -121,7 +122,15 @@ class Supervised(object):
         contexts = self._get_line_context(lines, n=CONTEXT_N_LINES)
         instances = []
         for i, line in enumerate(lines):
-            instances.append({'inputs': line, 'context': contexts[i]})
+            context = contexts[i]
+            if MAX_LENGTH > 0:
+                if len(line) > MAX_LENGTH:
+                    line = line[:MAX_LENGTH]
+                    context = ''
+                elif (len(line) + len(context)) > MAX_LENGTH:
+                    context = context[:MAX_LENGTH-len(line)]
+                assert (len(line) + len(context)) <= MAX_LENGTH
+            instances.append({'inputs': line, 'context': context})
         if self.verbosity > 0:
             print(f'making "line type" predictions for {len(instances)} lines...')
         if self.verbosity > 1:
@@ -253,7 +262,7 @@ class Supervised(object):
         """retrieves context for each line.
         """
         contexts = []
-        for i, line in enumerate(lines):
+        for i in range(len(lines)):
             prev_text = '\n'.join(lines[i-n:i])
             next_text = '\n'.join(lines[i+1:i+1+n])
             # line['prev_context'] = prev_line_text
