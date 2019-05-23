@@ -50,19 +50,25 @@ def extract_flatworld_tags(s: str) -> Tuple[str, List[str]]:
 
 
 def get_line_context(lines: pd.DataFrame, n: int = 1) -> pd.DataFrame:
-        lines = lines.copy()
-        lines.sort_values(by=['year', 'file', 'line'], inplace=True)
-        lines.reset_index(inplace=True, drop=True)
-        contexts = []
-        for nm, gp in lines.groupby(['year', 'file']):
-            for i, (_, line) in enumerate(gp.iterrows()):
-                prev_text = '\n'.join(gp.iloc[i-n:i,]['text'].values)
-                next_text = '\n'.join(gp.iloc[i+1:i+1+n,]['text'].values)
-                # line['prev_context'] = prev_line_text
-                # line['next_context'] = next_line_text
-                contexts.append(nm + (line['line'], prev_text, next_text))
-        contexts = pd.DataFrame(contexts, columns=['year', 'file', 'line', 'prev_context', 'next_context'])
-        return contexts
+    """Retrieves context surrounding a line.
+    Todos:
+
+        TODO: reimplement this method so that `n` refers to the number of
+            context characters or tokens, rather than the number of context lines.
+    """
+    lines = lines.copy()
+    lines.sort_values(by=['year', 'file', 'line'], inplace=True)
+    lines.reset_index(inplace=True, drop=True)
+    contexts = []
+    for nm, gp in lines.groupby(['year', 'file']):
+        for i, (_, line) in enumerate(gp.iterrows()):
+            prev_text = '\n'.join(gp.iloc[i-n:i,]['text'].values)
+            next_text = '\n'.join(gp.iloc[i+1:i+1+n,]['text'].values)
+            # line['prev_context'] = prev_line_text
+            # line['next_context'] = next_line_text
+            contexts.append(nm + (line['line'], prev_text, next_text))
+    contexts = pd.DataFrame(contexts, columns=['year', 'file', 'line', 'prev_context', 'next_context'])
+    return contexts
 
 
 def normalize_text(text):

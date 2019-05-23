@@ -146,17 +146,22 @@ class HansardLineType4(text_problems.Text2ClassProblem):
              f"data: {lines.label.unique().tolist()}")
         assert len(allowed_labels.difference(set(lines.label.unique()))) == 0, \
             ("One or more labels does not appear in training data.")
-        if is_train and config.N_SPLIT_LINES_PASSES > 0:
-            # randomly splits lines to create more training data.
-            lines_split = []
-            for i in range(config.N_SPLIT_LINES_PASSES):
-                lines_split_temp = split_lines(lines)
-                lines_split_temp['file'] += f'_{i}'
-                lines_split.append(lines_split_temp)
-            lines_split = pd.concat(lines_split, axis=0, ignore_index=True, sort=True)
-            # idx = np.random.randint(low=0, high=lines_split.shape[0])
-            # lines_split.iloc[idx:idx+10,:]
-            lines = pd.concat([lines, lines_split], axis=0, ignore_index=True, sort=True)
+        if is_train:
+            # duplicates data, without `garbage` lines.
+            lines_wo_garbage = lines[~lines.label.isin(['garbage'])]
+            lines_wo_garbage['file'] += f'_wo_garbage'
+            lines = pd.concat([lines, lines_wo_garbage], axis=0, ignore_index=True, sort=True)
+            if config.N_SPLIT_LINES_PASSES > 0:
+                # randomly splits lines to create more training data.
+                lines_split = []
+                for i in range(config.N_SPLIT_LINES_PASSES):
+                    lines_split_temp = split_lines(lines)
+                    lines_split_temp['file'] += f'_{i}'
+                    lines_split.append(lines_split_temp)
+                lines_split = pd.concat(lines_split, axis=0, ignore_index=True, sort=True)
+                # idx = np.random.randint(low=0, high=lines_split.shape[0])
+                # lines_split.iloc[idx:idx+10,:]
+                lines = pd.concat([lines, lines_split], axis=0, ignore_index=True, sort=True)
             lines.sort_values(by=['year', 'file', 'line'], inplace=True)
         # retrieves context surrounding each line.
         contexts = get_line_context(lines, n=config.CONTEXT_N_LINES)
