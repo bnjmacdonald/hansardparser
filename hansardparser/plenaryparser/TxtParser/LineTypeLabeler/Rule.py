@@ -169,6 +169,7 @@ class Rule(object):
         """checks if line fits condition for a "subheader" label. Returns True if
         so, False otherwise.
         """
+        line = line.strip()
         text_eq_upper = line == line.upper()
         tag_is_subheader = False
         if flatworld_tags is not None:
@@ -188,14 +189,18 @@ class Rule(object):
         """checks if line fits conditions for a "subsubheader" label. Returns True if
         so, False otherwise."""
         tag_is_subsubheader = False
+        line = line.strip()
         if flatworld_tags is not None:
             tag_is_subsubheader = any([bool(re.search(r'subsubheader', tag)) for tag in flatworld_tags]) 
         is_subsubheader = bool(
             tag_is_subsubheader or (
                 len(line) < 200 and
-                bool(re.search(r'^clause|^\(the house resumed\)|^(first|'
-                      r'second|third|fourth|fifth|sixth) schedule$', line, re.IGNORECASE))
-                
+                bool(re.search(r'^(n\s?e\s?w\s*)?c\s?l\s?a\s?u\s?s\s?e|'
+                               r'^division$|^noes$|^ayes$|'
+                               r'^(sub-?)?\s*vote\s*[dr]?\d+|^head\s*[dr]?\d+|'
+                               r'^(new\s*)?(first|second|third|fourth|fifth|sixth) schedule$|^schedule\s*\d+$',
+                               line,
+                               flags=re.IGNORECASE))
             )
         )
         return is_subsubheader
@@ -204,6 +209,7 @@ class Rule(object):
     def _is_speech(self, line: str, flatworld_tags: Optional[List[str]] = None) -> bool:
         """checks if line fits conditions for a "speech" label. Returns True if
         so, False otherwise."""
+        line = line.strip()
         text_neq_upper = line != line.upper()
         tag_is_speech_new = False
         if flatworld_tags is not None:
@@ -218,6 +224,7 @@ class Rule(object):
     def _is_scene(self, line: str, flatworld_tags: Optional[List[str]] = None) -> bool:
         """checks if line fits conditions for a "scene" label. Returns True if
         so, False otherwise."""
+        line = line.strip()
         text_neq_upper = line != line.upper()
         tag_is_scene = False
         if flatworld_tags is not None:
