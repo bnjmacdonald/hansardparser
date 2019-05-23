@@ -18,6 +18,7 @@ from copy import deepcopy
 from typing import List, Union, Optional, Tuple
 import pandas as pd
 from unicodedata import normalize
+from string import punctuation
 
 import utils
 from models.Entry import Entry
@@ -325,6 +326,35 @@ class TxtParser(object):
             for i, label in enumerate(line_type_labels):
                 if label is None:
                     logging.warn(f'Did not find label for line: "{lines[i]}"')
+        # overrides line type prediction for header predictions that should not be
+        # headers. Only overrides for headers in which the prev and next lines
+        # are NOT headers.
+        n_overridden = 0
+        for i, line in enumerate(lines):
+            if i == 0 or (i+1 == len(lines)):
+                continue
+            line_is_header_pred = bool(re.search(r'header', line_type_labels[i]))
+            if line_is_header_pred:
+                prev_line_is_header_pred = bool(re.search(r'header', line_type_labels[i-1]))
+                next_line_is_header_pred = bool(re.search(r'header', line_type_labels[i+1]))
+                if not (prev_line_is_header_pred or next_line_is_header_pred):
+                    replace = False
+                    days_of_week = r'Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday'
+                    if len(line) < 4:
+                        # override 1: line is less than 4 characters in length
+                        replace = True
+                    elif re.search(rf'^[\s\d{re.escape(punctuation)}]+$', line, flags=re.IGNORECASE):
+                        # override 2: line is all digits, whitespace, and/or punctuation.
+                        replace = True
+                    elif len(line) < 20 and re.search(days_of_week, line, flags=re.IGNORECASE):
+                        # override 3: line contains a day of the week and is less than
+                        # 20 characters in length (e.g. "Wednesday, 27").
+                        replace = True
+                    if replace:
+                        line_type_labels[i] = line_type_labels[i-1]
+                        n_overridden += 1
+        if self.verbosity > 1:
+            logging.info(f'I am overridding {n_overridden} `header` line type predictions.')
         # speaker_names, parsed_speaker_names, texts, speaker_span_labels = self.line_speaker_span_labeler.extract_speaker_names(lines, types=line_type_labels)
         speaker_span_labels = self.line_speaker_span_labeler.label_speaker_spans(lines, types=line_type_labels)
         assert len(speaker_span_labels) == len(lines)
