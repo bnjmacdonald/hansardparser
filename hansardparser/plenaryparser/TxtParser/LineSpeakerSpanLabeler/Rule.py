@@ -210,34 +210,54 @@ class Rule(object):
         if s is None:
             return None, None, None
         s = s.strip()
-        title_regex = (r'(?P<title>mr|bw|ms|bi|hon|capt|mrs|dr|prof|gen|maj-gen|maj'
-            r'|major|an hon|a hon|eng|engineer|col|rtd|rev|sen|mheshimiwa)')
+        title_regex = (r'mr|bw|ms|bi|hon|capt|mrs|dr|prof|gen|maj[\-\s\.]+gen|maj'
+            r'|major|an hon|a hon|eng|engineer|col|rtd|rev|sen|bishop|mheshimiwa')
         # title followed by space and name, then colon. (may or may not be in
         # parentheses)
-        # e.g. "Mr. Bett: Thank, you, Mr. Speaker."
-        name_regex1 = re.compile(rf'^([\(\[])?({title_regex}[\. ]{{1,2}})?'
-            r'(?P<name>[\dA-z-\', ]{3,100})([\)\]])?$', re.IGNORECASE|re.DOTALL)
+        # e.g. "Mr. Bett: Thank you, Mr. Speaker."
+        # e.g. "Hon. (Mrs.) Shebesh: Thank you, Mr. Speaker."
+        # e.g. "Hon. J.D. Lotodo: Thank you, Mr. Speaker."
+        name_regex1 = re.compile(
+            rf'^([\(\[])?((?P<title>{title_regex})[\.\s]+)?\s*'
+            rf'(\(\s*(?P<title2>{title_regex})[\.\s]*\))?\s*'
+            r'(?P<name>[\dA-z\-\'\.,\s]{3,100})\s*'
+            r'([\)\]])?$',
+            re.IGNORECASE|re.DOTALL)
         # for cases in which appointment is first, followed by name in parentheses.
         # e.g. "The Minister for Agriculture (Hon. Bett): Thank you, Mr. speaker."
-        name_regex2 = re.compile(rf'^(?P<appt>[\dA-z-\',\. ]{{5,}})\(\s{{0,2}}{title_regex}[\. ]{{1,2}}'
-            r'(?P<name>[\dA-z-\', ]{3,100})\)\s{0,2}$', re.IGNORECASE|re.DOTALL)
+        name_regex2 = re.compile(
+            rf'^(?P<appt>[\dA-z-\',\s]{{5,}})'
+            rf'\((\s*(?P<title>{title_regex})[\.\s]+)?\s*'
+            rf'(\(\s*(?P<title2>{title_regex})[\.\s]*\))?\s*'
+            r'(?P<name>[\dA-z-\'\.,\s]{3,100})\)\s*$',
+            re.IGNORECASE|re.DOTALL)
         # name is first, followed by appointment in parentheses.
         # e.g. "Hon. Bett (The Minister for Agriculture): Thank you, Mr. speaker."
-        name_regex3 = re.compile(rf'^{title_regex}[\. ]{{1,2}}'
-            r'(?P<name>[\dA-z-\', ]{3,100})\((?P<appt>[\dA-z-\',\. ]{5,})\)\s{0,2}$', re.IGNORECASE|re.DOTALL)
+        name_regex3 = re.compile(
+            rf'^(?P<title>{title_regex})[\.\s]+'
+            rf'(\(\s*(?P<title2>{title_regex})[\.\s]*\))?\s*'
+            r'(?P<name>[\dA-z-\'\.,\s]{3,100})\s*'
+            r'\(\s*(?P<appt>[\dA-z-\',\.\s]{5,})\s*\)\s*$',
+            re.IGNORECASE|re.DOTALL)
         # appointment only.
-        name_regex4 = re.compile(rf'^(?P<appt>[\dA-z-\',\. ]{{5,}})\s{{0,2}}$', re.IGNORECASE|re.DOTALL)
+        # e.g. "The Temporary Deputy Speaker: Order!"
+        name_regex4 = re.compile(rf'^\s*(?P<appt>[\dA-z-\',\.\s]{{5,}})\s*$', re.IGNORECASE|re.DOTALL)
+        # extracts name, title, and appointment using the regexes above.
         name, title, appt = None, None, None
         result = None
         for regex in [name_regex1, name_regex2, name_regex3, name_regex4]:
             result = regex.search(s)
-            # print(result)
             if result is not None:
                 name = result.group('name') if 'name' in result.groupdict() else None
+                appt = result.group('appt') if 'appt' in result.groupdict() else None
                 title = result.group('title') if 'title' in result.groupdict() else None
-                appt = result.group('appt') if 'appt' in result.groupdict() else None                
+                if 'title2' in result.groupdict() and result.group('title2') is not None:
+                    if title is None:
+                        title = ''
+                    title += ' ' + result.group('title2')   
                 break
         if name is not None:
+            name = name.strip()
             if re.search(r'speaker|minister|members', name, re.IGNORECASE):
                 if appt is not None:
                     appt += f' ({name})'  # KLUDGE: when does this actually happen?
@@ -245,4 +265,8 @@ class Rule(object):
                     appt = name
                 name = None
         name = clean_speaker_name(name)
+        if title is not None:
+            title = title.strip()
+        if appt is not None:
+            appt = appt.strip()
         return title, name, appt
