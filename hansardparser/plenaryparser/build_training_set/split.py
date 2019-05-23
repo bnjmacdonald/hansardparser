@@ -52,7 +52,7 @@ def train_dev_test_split(data: list, sizes: dict = None, **kwargs) -> dict:
     assert all(
         [k in ['train_size', 'dev_size', 'test_size']
          for k in sizes]), "only valid keys for sizes arg are train_size, dev_size, and test_size."
-    assert sum(sizes.values()) == 1.0, "sizes values must sum to 1.0."
+    assert round(sum(sizes.values()), 5) == 1.0, f"sizes values must sum to 1.0, but sum({sizes}) = {sum(sizes.values())}."
     # assert (len(sizes) == 2 and )
     if 'dev_size' in sizes:
         assert len(sizes) == 3
