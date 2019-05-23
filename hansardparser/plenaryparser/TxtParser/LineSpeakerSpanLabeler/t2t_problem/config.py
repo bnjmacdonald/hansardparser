@@ -8,4 +8,4 @@ UPSAMPLE_FACTOR = 10
 CONTEXT_N_LINES = 4
 # number of times to call `split_lines` on the training data. If 0, `split_lines`
 # is not called.
-N_SPLIT_LINES_PASSES = 1
+N_SPLIT_LINES_PASSES = 2
