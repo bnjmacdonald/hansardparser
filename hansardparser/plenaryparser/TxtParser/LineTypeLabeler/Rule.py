@@ -1,7 +1,7 @@
 
 import os
 import re
-import warnings
+import logging
 from typing import List, Optional, Set
 from google.cloud import storage
 
@@ -117,13 +117,13 @@ class Rule(object):
             if test_results['header'] and test_results['scene']:
                 test_results['scene'] = False
         if self.verbosity > 1 and sum(test_results.values()) > 1:
-            warnings.warn(f'Multiple labels found for line: {line};\nLabels found: {", ".join([k for k, v in test_results.items() if v])}')
+            logging.warn(f'Multiple labels found for line: {line};\nLabels found: {", ".join([k for k, v in test_results.items() if v])}')
         # returns label string.
         for k, v in test_results.items():
             if v:
                 return k
         if self.verbosity > 1:
-            warnings.warn(f'Did not find label for line: {line}', RuntimeWarning)
+            logging.warn(f'Did not find label for line: {line}')
         return None
 
 

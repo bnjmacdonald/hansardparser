@@ -4,7 +4,7 @@ import re
 import requests
 import json
 import base64
-import warnings
+import logging
 import numpy as np
 from typing import List, Tuple, Optional
 from tqdm import tqdm
@@ -111,10 +111,10 @@ class Supervised(object):
                 # then assign the whole line as a speaker.
                 if len(line_texts[i]) < 200 and bool(re.search(r'[A-z]', line_texts[i])) and not bool(re.search(r'[BI]', pred_bio)):
                     if self.verbosity > 1:
-                        warnings.warn(f'Line is predicted to have a speaker, '
+                        logging.warn(f'Line is predicted to have a speaker, '
                                       f'but I failed to extract a speaker. I '
                                       f'am over-riding by assigning the whole '
-                                      f'line as a speaker name. Line: {line_texts[i]}', RuntimeWarning)
+                                      f'line as a speaker name. Line: {line_texts[i]}')
                     pred_bio = ['B'] + ['I'] * (len(pred_bio) - 1)
                     pred_bio = ''.join(pred_bio)
             else:

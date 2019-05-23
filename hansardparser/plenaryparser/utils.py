@@ -2,7 +2,7 @@
 import os
 import json
 import numpy as np
-import warnings
+import logging
 from typing import Tuple, Optional, List, Iterable, Generator, Any
 import collections
 import datetime
@@ -30,7 +30,7 @@ try:
     ])
 except:
     _ENGLISH_WORDS = set([])
-    warnings.warn('Corpora/words not found. Need to run nltk.download().', RuntimeWarning)
+    logging.warn('Corpora/words not found. Need to run nltk.download().')
 
 
 def date_search(s):

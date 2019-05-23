@@ -1,7 +1,6 @@
 
 import os
 import re
-import warnings
 import shutil
 from typing import List, Tuple
 import numpy as np

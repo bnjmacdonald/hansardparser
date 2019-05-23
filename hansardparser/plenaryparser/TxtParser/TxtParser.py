@@ -12,7 +12,7 @@ Notes:
 import os
 import re
 import time
-import warnings
+import logging
 import datetime
 from copy import deepcopy
 from typing import List, Union, Optional, Tuple
@@ -83,6 +83,8 @@ class TxtParser(object):
         self._unmerged_parsed_transcript = None
         self._line_type4_preds = None
         self._line_speaker_span_preds = None
+        if self.verbosity > 0:
+            logging.getLogger().setLevel(logging.INFO)
 
 
     def parse_hansard(self,
@@ -189,11 +191,11 @@ class TxtParser(object):
         times = self._extract_sitting_time(text)
         if self.verbosity > 0:
             if date is None:
-                warnings.warn('Date not found in transcript.')
+                logging.warn('Date not found in transcript.')
             if 'start' not in times:
-                warnings.warn('Start time not found in transcript.')
+                logging.warn('Start time not found in transcript.')
             if 'end' not in times:
-                warnings.warn('Start time not found in transcript.')
+                logging.warn('Start time not found in transcript.')
         start_date = date
         if date is not None and times['start'] is not None:
             start_date = start_date.replace(hour=times['start'][0], minute=times['start'][1])
@@ -322,7 +324,7 @@ class TxtParser(object):
         if self.verbosity > 1:
             for i, label in enumerate(line_type_labels):
                 if label is None:
-                    warnings.warn(f'Did not find label for line: "{lines[i]}"', RuntimeWarning)
+                    logging.warn(f'Did not find label for line: "{lines[i]}"')
         # speaker_names, parsed_speaker_names, texts, speaker_span_labels = self.line_speaker_span_labeler.extract_speaker_names(lines, types=line_type_labels)
         speaker_span_labels = self.line_speaker_span_labeler.label_speaker_spans(lines, types=line_type_labels)
         assert len(speaker_span_labels) == len(lines)
@@ -335,9 +337,9 @@ class TxtParser(object):
         for i, line in enumerate(lines):
             if line_type_labels[i] != 'speech':
                 if self.verbosity > 1 and re.search(r'[BI]', speaker_span_labels[i]):
-                    warnings.warn(f'I found a speaker name in a "{line_type_labels[i]}" line. '
-                                  f'I am overriding this by setting the speaker_name '
-                                  f'to None. Line: "{lines[i]}"', RuntimeWarning)
+                    logging.warn(f'I found a speaker name in a "{line_type_labels[i]}" line. '
+                                 f'I am overriding this by setting the speaker_name '
+                                 f'to None. Line: "{lines[i]}"')
                 speaker_names[i] = None
                 parsed_speaker_names[i] = (None, None, None)
                 texts[i] = line

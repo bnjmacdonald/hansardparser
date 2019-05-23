@@ -1,6 +1,6 @@
 
 import re
-import warnings
+import logging
 from typing import List, Tuple, Optional
 
 from utils import extract_flatworld_tags, clean_speaker_name
@@ -61,7 +61,7 @@ class Rule(object):
             # And, then, if the next line ...
             if len(texts) > 0 and speaker_name is not None and re.search(r'^\s*\(', speaker_name):
                 if self.verbosity > 1 and speaker_names[-1] is not None:
-                    warnings.warn(f'expected previous speaker name to be None, but received {speaker_names[-1]}. Current line: {text}.')
+                    logging.warn(f'expected previous speaker name to be None, but received {speaker_names[-1]}. Current line: {text}.')
                 pat = r'^the.+minister|^assistant.+minister|^minister|^the.+speaker|^temporary.+speaker'
                 if re.search(pat, texts[-1], flags=re.IGNORECASE):
                     speaker_name = ' '.join([texts[-1], speaker_name])
@@ -143,7 +143,7 @@ class Rule(object):
             if len(s) > len(pred):
                 pred += 'O' * (len(s) - len(pred))
             if self.verbosity > 1:
-                warnings.warn(f'Length of string should equal length of '
+                logging.warn(f'Length of string should equal length of '
                               f'prediction, but {len(s)} != {len(pred)}. '
                               f'String: "{s}". Prediction: "{pred}".')
         speaker_name = ''

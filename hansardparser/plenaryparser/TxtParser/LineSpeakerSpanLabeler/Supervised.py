@@ -4,7 +4,7 @@ import re
 import requests
 import json
 import base64
-import warnings
+import logging
 import numpy as np
 from typing import List, Tuple, Optional
 from tqdm import tqdm
@@ -191,7 +191,7 @@ class Supervised(object):
                         pred_out = pred_out[:eos_idx]
                     except ValueError:
                         if self.verbosity > 1:
-                            warnings.warn(f'<eos> not found in prediction: {pred_out}')
+                            logging.warn(f'<eos> not found in prediction: {pred_out}')
                     preds.append(pred_out)
                     # preds.append([token_pred[0][0] for token_pred in pred['outputs']])
             except AssertionError as e:
