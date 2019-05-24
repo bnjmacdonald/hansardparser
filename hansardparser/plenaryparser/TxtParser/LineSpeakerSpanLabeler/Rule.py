@@ -237,11 +237,11 @@ class Rule(object):
             rf'^(?P<title>{title_regex})[\.\s]+'
             rf'(\(\s*(?P<title2>{title_regex})[\.\s]*\))?\s*'
             r'(?P<name>[\dA-z-\'\.,\s]{3,100})\s*'
-            r'\(\s*(?P<appt>[\dA-z-\',\.\s]{5,})\s*\)\s*$',
+            r'\(\s*(?P<appt>[\dA-z-\',\.\s/]{5,})\s*\)\s*$',
             re.IGNORECASE|re.DOTALL)
         # appointment only.
         # e.g. "The Temporary Deputy Speaker: Order!"
-        name_regex4 = re.compile(rf'^\s*(?P<appt>[\dA-z-\',\.\s]{{5,}})\s*$', re.IGNORECASE|re.DOTALL)
+        name_regex4 = re.compile(rf'^\s*(?P<appt>[\dA-z-\',\.\s/]{{5,}})\s*$', re.IGNORECASE|re.DOTALL)
         # extracts name, title, and appointment using the regexes above.
         name, title, appt = None, None, None
         result = None
