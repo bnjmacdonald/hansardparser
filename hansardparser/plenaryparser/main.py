@@ -77,8 +77,8 @@ def main():
                 'parsed_transcript': parsed_transcript,
                 'sitting_text': parser._sitting_text,
                 'unmerged_parsed_transcript': parser._unmerged_parsed_transcript,
-                'line_type4_pred': parser._line_type4_preds,
-                'line_speaker_span_pred': parser._line_speaker_span_preds
+                'line_type4_preds': parser._line_type4_preds,
+                'line_speaker_span_preds': parser._line_speaker_span_preds
             }
             return jsonify(result)
         except Exception:
