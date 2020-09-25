@@ -28,7 +28,7 @@ setup(
         'requests==2.21.0',
         'tensor2tensor==1.13.2',
         'tensorboard==1.13.1',
-        'tensorflow==1.13.1',
+        'tensorflow==1.15.4',
         'tensorflow-datasets==1.0.1',
         'tensorflow-estimator==1.13.0',
         'tensorflow-hub==0.4.0',
