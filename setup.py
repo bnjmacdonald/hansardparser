@@ -21,7 +21,7 @@ setup(
         'google-api-python-client==1.7.8',
         'google-cloud-storage==1.14.0',
         'gunicorn==19.9.0',
-        'nltk==3.2.1',
+        'nltk==3.6.3',
         'numpy==1.16.2',
         'pandas==0.24.2',
         'PyPDF2==1.26.0',
