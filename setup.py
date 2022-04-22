@@ -24,7 +24,7 @@ setup(
         'nltk==3.2.1',
         'numpy==1.16.2',
         'pandas==0.24.2',
-        'PyPDF2==1.26.0',
+        'PyPDF2==1.27.5',
         'requests==2.21.0',
         'tensor2tensor==1.13.2',
         'tensorboard==1.13.1',
